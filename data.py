@@ -40,7 +40,12 @@ SOS_TEAM = {
 # Coaching-prowess multiplier by team: staff/play-caller QUALITY (scheming players open,
 # play-calling, RZ, development, in-game adjustments) — an axis beyond scheme volume and
 # Vegas. Small (±4%). Populated from the coaching-prowess research sweep.
-COACHING = {}
+COACHING = {
+    "ARI":0.99,"ATL":1.01,"BAL":0.99,"BUF":1.02,"CAR":1.00,"CHI":1.03,"CIN":1.01,"CLE":1.00,
+    "DAL":1.00,"DEN":1.03,"DET":1.01,"GB":1.02,"HOU":1.00,"IND":1.02,"JAX":1.02,"KC":1.04,
+    "LV":1.00,"LAC":1.02,"LAR":1.04,"MIA":0.99,"MIN":1.03,"NE":1.01,"NO":1.00,"NYG":0.97,
+    "NYJ":0.99,"PHI":1.00,"PIT":1.00,"SF":1.04,"SEA":0.99,"TB":1.00,"TEN":0.98,"WAS":0.99,
+}
 
 # replacement rank per position given 12-team league demand (starters + flex share).
 # PPR-neutral: the 2 FLEX slots skew WR in PPR, so WR replacement sits DEEPER than RB.

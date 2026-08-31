@@ -7,7 +7,7 @@ the pick that maximizes expected end-of-horizon roster value. This is what makes
 scarcity (elite RB) over raw EV (QB): the sim sees a comparable QB survive but the RB won't.
 """
 import math, random
-import config
+import config, overrides
 
 SLOT_ORDER = ["QB", "RB", "WR", "TE", "K", "DEF"]  # dedicated starter slots
 
@@ -71,14 +71,33 @@ def _starters(roster):
 
 
 def weekly_moments(roster):
-    """(mean, variance) of the roster's weekly team score from its optimal starters."""
+    """(mean, variance) of the roster's weekly team score from its optimal starters.
+    Adds QB<->same-team pass-catcher correlation: a stack raises joint variance (ceiling)
+    and gets a small ceiling bonus, so the sim values completing stacks."""
+    starters = _starters(roster)
     mu = var = 0.0
-    for p in _starters(roster):
+    info = []
+    for p in starters:
         m = p["adj_proj"] / config.GAMES
-        cv = config.POS_CV.get(p["pos"], 0.6)
+        sd = config.POS_CV.get(p["pos"], 0.6) * m
         mu += m
-        var += (cv * m) ** 2
+        var += sd * sd
+        info.append((m, sd, p.get("team"), p["pos"]))
+    for mq, sq, tq, pq in info:                       # each starting QB...
+        if pq != "QB" or not tq:
+            continue
+        for mi, si, ti, pi in info:                   # ...paired with same-team WR/TE
+            if pi in ("WR", "TE") and ti == tq:
+                var += 2 * config.STACK_RHO * sq * si
+                mu += config.STACK_MU
     return mu, var
+
+
+def _handcuff_count(roster):
+    """How many of my players are the handcuff to another RB I roster (insurance depth)."""
+    names = {p["name"] for p in roster}
+    return sum(1 for p in roster
+               if overrides.HANDCUFFS.get(p["name"]) in names)
 
 
 def _complete(roster, avail_by_vor):
@@ -131,9 +150,10 @@ def league_baseline(players, teams=config.NUM_TEAMS, rounds=config.ROUNDS):
 
 def _leaf(roster, avail_by_vor, baseline):
     """Score a roster at a rollout leaf: variance-aware expected wins (completing the
-    roster to 15 first), or the legacy sum-of-projections if USE_WIN_VALUE is off."""
+    roster to 15 first) + handcuff insurance, or legacy sum if USE_WIN_VALUE is off."""
     if config.USE_WIN_VALUE and baseline:
-        return win_value(_complete(roster, avail_by_vor), *baseline)
+        full = _complete(roster, avail_by_vor)
+        return win_value(full, *baseline) + config.HANDCUFF_BONUS * _handcuff_count(full)
     return start_value(roster)
 
 
