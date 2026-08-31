@@ -171,17 +171,39 @@ def _my_best(avail_by_vor, roster):
     return best or (avail_by_vor[0] if avail_by_vor else None)
 
 
-def _opp_pick(avail_by_adp, pick_no, rng, eps=0.03):
-    """Opponent pick via ADP pressure. spread grows with ADP (elites barely slide, mid/late
-    players swing 1-2 rounds — matches real ADP dispersion), plus a small chaos floor eps so
-    rare falls still surface. Players at/under the current pick are 'overdue' (max weight)."""
+_STARTER_TARGET = {"QB": 1, "RB": 2, "WR": 2, "TE": 1}
+
+
+def _deficit(positions):
+    """How many starters short an opponent is per position (drives need-based reaches)."""
+    cnt = {}
+    for p in positions:
+        cnt[p] = cnt.get(p, 0) + 1
+    return {pos: max(0, t - cnt.get(pos, 0)) for pos, t in _STARTER_TARGET.items()}
+
+
+def _opp_pick(avail_by_adp, pick_no, rng, opp_positions=None, recent=None, eps=0.03):
+    """Opponent pick. ADP pressure (spread grows with ADP so elites barely slide) x a
+    roster-NEED boost (opponents chase positions they're short) x a RUN-contagion boost
+    (positions going hot get chased) + chaos floor. This is what makes the sim draft-specific:
+    seed opp_positions from real picks and it predicts THIS league's opponents, not a generic one."""
     cands = avail_by_adp[:45]
     if not cands:
         return None
+    deficit = _deficit(opp_positions or [])
+    runcnt = {}
+    if recent:
+        for pos in recent:
+            runcnt[pos] = runcnt.get(pos, 0) + 1
+    base = (len(recent) * 0.28) if recent else 0   # ~RB/WR baseline share of picks
     weights = []
     for p in cands:
         spread = min(22.0, max(1.5, 0.5 + 0.15 * p["adp"]))
-        weights.append(math.exp(-max(0.0, p["adp"] - pick_no) / spread) + eps)
+        w = math.exp(-max(0.0, p["adp"] - pick_no) / spread)
+        w *= math.exp(config.OPP_NEED_BETA * deficit.get(p["pos"], 0))
+        if recent:
+            w *= math.exp(config.OPP_RUN_GAMMA * max(0.0, runcnt.get(p["pos"], 0) - base))
+        weights.append(w + eps)
     r = rng.random() * sum(weights)
     for p, w in zip(cands, weights):
         r -= w
@@ -190,13 +212,23 @@ def _opp_pick(avail_by_adp, pick_no, rng, eps=0.03):
     return cands[-1]
 
 
-def _rollout(candidate, my_roster, universe, drafted, my_future, cur_pick, rng, baseline):
-    """One simulated future. Returns end-horizon roster value if I take `candidate` now."""
+def _slot_on_clock(pick_no, teams=config.NUM_TEAMS):
+    r = (pick_no - 1) // teams + 1
+    in_rnd = (pick_no - 1) % teams + 1
+    return in_rnd if r % 2 else teams + 1 - in_rnd
+
+
+def _rollout(candidate, my_roster, universe, drafted, my_future, cur_pick, rng, baseline,
+             opp_rosters=None, recent0=None):
+    """One simulated future. Returns end-horizon roster value if I take `candidate` now.
+    Opponents pick by real roster needs when opp_rosters (slot -> [positions]) is seeded."""
     taken = set(drafted)
     taken.add(candidate["pid"])
     roster = my_roster + [candidate]
     mine = set(my_future)
     avail = [p for p in universe if p["pid"] not in taken]
+    rosters = {s: list(v) for s, v in (opp_rosters or {}).items()}
+    recent = list(recent0 or [])[-config.OPP_RUN_K:]
     horizon = my_future[-1] if my_future else cur_pick
     for pick_no in range(cur_pick + 1, horizon + 1):
         if not avail:
@@ -208,17 +240,23 @@ def _rollout(candidate, my_roster, universe, drafted, my_future, cur_pick, rng, 
                 roster.append(p)
         else:
             avail.sort(key=lambda x: x["adp"])
-            p = _opp_pick(avail, pick_no, rng)
+            slot = _slot_on_clock(pick_no)
+            p = _opp_pick(avail, pick_no, rng, rosters.get(slot), recent)
+            if p:
+                rosters.setdefault(slot, []).append(p["pos"])
+                recent.append(p["pos"]); recent = recent[-config.OPP_RUN_K:]
         if p:
             avail.remove(p)
     avail.sort(key=lambda x: x["vor"], reverse=True)
     return _leaf(roster, avail, baseline)
 
 
-def survival_probs(players, drafted, cur_pick, my_next, rollouts=200, seed=0, top_n=70):
+def survival_probs(players, drafted, cur_pick, my_next, rollouts=200, seed=0, top_n=70,
+                   opp_rosters=None, recent0=None):
     """P(player still available at my_next) for the top_n available by VOR — the turn
-    drafter's core question ("will he survive my 22-pick wait?"). Simulates only the
-    opponent picks strictly between cur_pick and my_next via the ADP-pressure model."""
+    drafter's core question ("will he survive my 22-pick wait?"). Simulates the opponent
+    picks strictly between cur_pick and my_next. If opp_rosters (slot -> [positions], from
+    the REAL draft) is given, opponents pick by their actual needs — draft-specific survival."""
     avail0 = sorted((p for p in players if p["pid"] not in drafted),
                     key=lambda x: x["vor"], reverse=True)
     cohort = {p["pid"] for p in avail0[:top_n]}
@@ -228,13 +266,19 @@ def survival_probs(players, drafted, cur_pick, my_next, rollouts=200, seed=0, to
     survive = {pid: 0 for pid in cohort}
     for i in range(rollouts):
         rng = random.Random(seed + i)
-        avail = sorted(avail0, key=lambda x: x["adp"])  # adp order; removes keep it sorted
+        avail = sorted(avail0, key=lambda x: x["adp"])
+        rosters = {s: list(v) for s, v in (opp_rosters or {}).items()}
+        recent = list(recent0 or [])[-config.OPP_RUN_K:]
         taken = set()
         for k in range(n_opp):
-            p = _opp_pick(avail, cur_pick + 1 + k, rng)
+            pn = cur_pick + 1 + k
+            slot = _slot_on_clock(pn)
+            p = _opp_pick(avail, pn, rng, rosters.get(slot), recent)
             if p:
                 avail.remove(p)
                 taken.add(p["pid"])
+                rosters.setdefault(slot, []).append(p["pos"])
+                recent.append(p["pos"]); recent = recent[-config.OPP_RUN_K:]
         for pid in cohort:
             if pid not in taken:
                 survive[pid] += 1
@@ -258,7 +302,8 @@ def tiers(players, drafted, pos, gap=18.0):
 
 
 def recommend(players, drafted, my_roster, my_slot, cur_pick,
-              k=12, rollouts=40, lookahead=5, universe_size=220, seed=None):
+              k=12, rollouts=40, lookahead=5, universe_size=220, seed=None,
+              opp_rosters=None, recent0=None):
     """Rank candidate picks by expected end-horizon roster value.
 
     players: full board (from data.build_players). drafted: set of pids already gone.
@@ -292,7 +337,8 @@ def recommend(players, drafted, my_roster, my_slot, cur_pick,
     results = []
     for c in cands:
         vals = [_rollout(c, my_roster, universe, drafted, my_future, cur_pick,
-                         random.Random((seed or 0) + i), baseline) for i in range(rollouts)]
+                         random.Random((seed or 0) + i), baseline, opp_rosters, recent0)
+                for i in range(rollouts)]
         exp = sum(vals) / len(vals)
         results.append({"player": c, "exp_value": exp, "delta": exp - base})
     # Rank by expected wins, but break near-ties (within ~0.1 win, i.e. rollout noise) by

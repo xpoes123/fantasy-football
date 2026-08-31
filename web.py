@@ -67,6 +67,16 @@ def compute_state(slot_override):
     cur = n + 1
     on_slot = live.slot_on_clock(cur, teams) if cur <= teams * rounds else None
     drafted = {p["player_id"] for p in picks}
+    # per-opponent rosters (slot -> [positions]) + recent-pick window, from the REAL draft,
+    # so simulated opponents pick by their actual needs (draft-specific survival & recs).
+    opp_rosters, recent0 = {}, []
+    for p in picks:
+        ds = p.get("draft_slot")
+        pos = (p.get("metadata") or {}).get("position") or (idx.get(p["player_id"]) or {}).get("pos")
+        if ds and pos:
+            opp_rosters.setdefault(ds, []).append(pos)
+    recent0 = [(p.get("metadata") or {}).get("position") for p in picks[-config.OPP_RUN_K:]]
+    recent0 = [x for x in recent0 if x]
     order_rev = {v: k for k, v in order.items()}
     on_team = umap.get(order_rev.get(on_slot)) if order_rev else None
 
@@ -82,8 +92,9 @@ def compute_state(slot_override):
         if my_next:
             rolls = 60 if on_slot == slot else 35
             r = engine.recommend(players, drafted, my_roster, slot, my_next,
-                                 rollouts=rolls, seed=7)
-            surv = engine.survival_probs(players, drafted, cur, my_next, seed=7)
+                                 rollouts=rolls, seed=7, opp_rosters=opp_rosters, recent0=recent0)
+            surv = engine.survival_probs(players, drafted, cur, my_next, seed=7,
+                                         opp_rosters=opp_rosters, recent0=recent0)
             scored = [{"pos": x["player"]["pos"], "name": x["player"]["name"],
                        "team": x["player"]["team"], "inj": x["player"].get("inj"),
                        "vor": x["player"]["vor"], "adp": x["player"]["adp"],
@@ -112,7 +123,8 @@ def compute_state(slot_override):
 
     # survival to my next pick (for the whole board, not just recs) — the turn drafter's
     # core signal. Plus positional cliff markers and position-run detection.
-    surv_all = engine.survival_probs(players, drafted, cur, my_next, seed=7) if my_next else {}
+    surv_all = engine.survival_probs(players, drafted, cur, my_next, seed=7,
+                                     opp_rosters=opp_rosters, recent0=recent0) if my_next else {}
     cliff_pids, elites_left = set(), {}
     for pos in ("QB", "RB", "WR", "TE"):
         ts = engine.tiers(players, drafted, pos)

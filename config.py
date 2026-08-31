@@ -36,6 +36,11 @@ RISK_LAMBDA = 0.0       # >0 chases ceiling (μ+λσ), <0 chases floor. 0 = pure
 POS_CV = {"QB": 0.30, "RB": 0.55, "WR": 0.65, "TE": 0.75, "K": 0.70, "DEF": 0.90}
 GAMES = 17              # games a season projection is spread across
 
+# --- opponent modeling: how simulated opponents pick (beyond raw ADP) ---
+OPP_NEED_BETA = 0.55    # boost positions an opponent still needs (roster-need pressure)
+OPP_RUN_GAMMA = 0.45    # boost positions running hot recently (position-run contagion)
+OPP_RUN_K = 8           # sliding window (picks) for run detection
+
 # --- roster synergy: correlations/combinations the sim should reward ---
 STACK_RHO = 0.35        # QB <-> same-team pass-catcher weekly correlation (raises ceiling)
 STACK_MU = 1.2          # weekly ceiling value added per QB+pass-catcher stack among starters
