@@ -26,3 +26,11 @@ ODDS_API_KEY = os.environ.get("ODDS_API_KEY")  # set in .env (gitignored)
 
 POLL_SECONDS = 3
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "data", "cache")
+
+# --- season-sim objective (variance-aware expected wins) ---
+USE_WIN_VALUE = True    # False -> fall back to deterministic sum-of-projections leaf
+REG_WEEKS = 14          # H2H regular-season weeks (playoffs start week 15)
+RISK_LAMBDA = 0.0       # >0 chases ceiling (μ+λσ), <0 chases floor. 0 = pure E[wins].
+# weekly coefficient of variation by position (how boom/bust a weekly score is)
+POS_CV = {"QB": 0.30, "RB": 0.55, "WR": 0.65, "TE": 0.75, "K": 0.70, "DEF": 0.90}
+GAMES = 17              # games a season projection is spread across

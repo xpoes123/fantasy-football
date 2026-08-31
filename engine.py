@@ -44,6 +44,99 @@ def start_value(roster):
     return total + 0.10 * bench
 
 
+# ---------------------------------------------------------------------------
+# Variance-aware season objective. Instead of scoring a roster by the deterministic
+# sum of its starters' season points, model each starter's WEEKLY score as a normal
+# (mean = season/17, sd = position CV × mean) and compute expected H2H wins vs a
+# league-average team. This makes boom/bust and consistency actually matter, and lets
+# a risk knob chase floor or ceiling — a real (if analytic) season simulation.
+# ---------------------------------------------------------------------------
+
+def _starters(roster):
+    """The players filling the 10 starting slots, chosen by projection (same rule as
+    start_value): dedicated slots take each position's best, FLEX the best leftover."""
+    pools = {pos: sorted((p for p in roster if p["pos"] == pos),
+                         key=lambda x: -x["adj_proj"]) for pos in SLOT_ORDER}
+    idx = {pos: 0 for pos in SLOT_ORDER}
+    st = []
+    for pos in SLOT_ORDER:
+        for _ in range(config.SLOTS[pos]):
+            if idx[pos] < len(pools[pos]):
+                st.append(pools[pos][idx[pos]]); idx[pos] += 1
+    leftovers = []
+    for pos in config.FLEX_POS:
+        leftovers += pools[pos][idx[pos]:]
+    leftovers.sort(key=lambda x: -x["adj_proj"])
+    return st + leftovers[: config.SLOTS["FLEX"]]
+
+
+def weekly_moments(roster):
+    """(mean, variance) of the roster's weekly team score from its optimal starters."""
+    mu = var = 0.0
+    for p in _starters(roster):
+        m = p["adj_proj"] / config.GAMES
+        cv = config.POS_CV.get(p["pos"], 0.6)
+        mu += m
+        var += (cv * m) ** 2
+    return mu, var
+
+
+def _complete(roster, avail_by_vor):
+    """Greedily fill a partial roster to 15 so byes/depth/K/DEF enter the objective.
+    Ensures one K and one DEF (their starter slots would otherwise score 0)."""
+    need = 15 - len(roster)
+    if need <= 0:
+        return roster
+    have = {p["pos"] for p in roster}
+    picked = []
+    for pos in ("K", "DEF"):
+        if pos not in have:
+            nxt = next((p for p in avail_by_vor if p["pos"] == pos), None)
+            if nxt:
+                picked.append(nxt)
+    for p in avail_by_vor:
+        if len(picked) >= need:
+            break
+        if p["pos"] in ("K", "DEF") or p in picked:
+            continue
+        picked.append(p)
+    return roster + picked[:need]
+
+
+def win_value(roster, mu_L, var_L):
+    """Expected H2H regular-season wins vs a league-average team (μ_L, var_L).
+    P(win a week) = Φ((μ_T − μ_L)/√(var_T+var_L)); ×REG_WEEKS. RISK_LAMBDA shifts μ_T
+    by λ·σ_T to chase ceiling (λ>0) or floor (λ<0)."""
+    mu, var = weekly_moments(roster)
+    mu_eff = mu + config.RISK_LAMBDA * math.sqrt(var) if var > 0 else mu
+    denom = math.sqrt(2.0 * (var + var_L)) or 1.0
+    pwin = 0.5 * math.erfc(-(mu_eff - mu_L) / denom)
+    return config.REG_WEEKS * pwin
+
+
+def league_baseline(players, teams=config.NUM_TEAMS, rounds=config.ROUNDS):
+    """(μ_L, var_L): the average opponent, from snake-drafting the top ADP players into
+    12 rosters and averaging their weekly moments."""
+    order = sorted(players, key=lambda x: x["adp"])[: teams * rounds]
+    rosters = [[] for _ in range(teams)]
+    i = 0
+    for r in range(rounds):
+        seq = range(teams) if r % 2 == 0 else range(teams - 1, -1, -1)
+        for t in seq:
+            if i < len(order):
+                rosters[t].append(order[i]); i += 1
+    ms, vs = zip(*(weekly_moments(ro) for ro in rosters))
+    return sum(ms) / len(ms), sum(vs) / len(vs)
+
+
+def _leaf(roster, avail_by_vor, baseline):
+    """Score a roster at a rollout leaf: variance-aware expected wins (completing the
+    roster to 15 first), or the legacy sum-of-projections if USE_WIN_VALUE is off."""
+    if config.USE_WIN_VALUE and baseline:
+        return win_value(_complete(roster, avail_by_vor), *baseline)
+    return start_value(roster)
+
+
 def _marginal(roster, p):
     return start_value(roster + [p]) - start_value(roster)
 
@@ -73,7 +166,7 @@ def _opp_pick(avail_by_adp, pick_no, rng, spread=12.0):
     return cands[-1]
 
 
-def _rollout(candidate, my_roster, universe, drafted, my_future, cur_pick, rng):
+def _rollout(candidate, my_roster, universe, drafted, my_future, cur_pick, rng, baseline):
     """One simulated future. Returns end-horizon roster value if I take `candidate` now."""
     taken = set(drafted)
     taken.add(candidate["pid"])
@@ -94,7 +187,8 @@ def _rollout(candidate, my_roster, universe, drafted, my_future, cur_pick, rng):
             p = _opp_pick(avail, pick_no, rng)
         if p:
             avail.remove(p)
-    return start_value(roster)
+    avail.sort(key=lambda x: x["vor"], reverse=True)
+    return _leaf(roster, avail, baseline)
 
 
 def recommend(players, drafted, my_roster, my_slot, cur_pick,
@@ -127,14 +221,17 @@ def recommend(players, drafted, my_roster, my_slot, cur_pick,
             if p["pos"] == pos and p["pid"] not in have:
                 cands.append(p); have.add(p["pid"]); break
 
-    base = start_value(my_roster)
+    baseline = league_baseline(players) if config.USE_WIN_VALUE else None
+    base = _leaf(my_roster, avail_by_vor, baseline)
     results = []
     for c in cands:
         vals = [_rollout(c, my_roster, universe, drafted, my_future, cur_pick,
-                         random.Random((seed or 0) + i)) for i in range(rollouts)]
+                         random.Random((seed or 0) + i), baseline) for i in range(rollouts)]
         exp = sum(vals) / len(vals)
         results.append({"player": c, "exp_value": exp, "delta": exp - base})
-    results.sort(key=lambda x: x["exp_value"], reverse=True)
+    # Rank by expected wins, but break near-ties (within ~0.1 win, i.e. rollout noise) by
+    # VOR — when two picks are equal-equity, take the better value/scarcity play.
+    results.sort(key=lambda x: (round(x["exp_value"], 1), x["player"]["vor"]), reverse=True)
     return results
 
 
@@ -150,6 +247,6 @@ if __name__ == "__main__":
           round(recs[0]["exp_value"], 1))
     for r in recs[:6]:
         p = r["player"]
-        print(f"  {p['pos']:3} {p['name'][:22]:22} vor {p['vor']:6}  E[roster] {r['exp_value']:7.1f}")
+        print(f"  {p['pos']:3} {p['name'][:22]:22} vor {p['vor']:6}  E[wins] {r['exp_value']:5.1f}")
     assert top["pos"] in ("RB", "WR"), f"expected elite RB/WR at 1.01, got {top['pos']}"
     print("OK: scarcity-aware (RB/WR over QB at 1.01)")

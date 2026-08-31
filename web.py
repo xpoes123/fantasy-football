@@ -76,7 +76,7 @@ def compute_state(slot_override):
             recs = [{"pos": x["player"]["pos"], "name": x["player"]["name"],
                      "team": x["player"]["team"], "inj": x["player"].get("inj"),
                      "vor": x["player"]["vor"], "adp": x["player"]["adp"],
-                     "exp": round(x["exp_value"], 0)} for x in r[:6]]
+                     "exp": round(x["exp_value"], 1)} for x in r[:6]]
             cliffs = _cliffs(players, drafted, need)
 
     avail = sorted((p for p in players if p["pid"] not in drafted),

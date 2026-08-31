@@ -127,7 +127,7 @@ function render(s){
         <span class="rk">${i===0?'➤':i+1}</span>${posEl(r.pos)}
         <span class="nm">${r.name}${injTag(r.inj)}</span>
         <span class="meta"><b>vor</b> ${Math.round(r.vor)} &nbsp;<b>adp</b> ${r.adp.toFixed(1)}</span>
-        <span class="exp">${Math.round(r.exp)}</span>
+        <span class="exp" title="expected regular-season wins">${r.exp.toFixed(1)}w</span>
       </div>`).join('');
   } else {
     $('recs').innerHTML = `<div class="cliff">${s.slot? 'waiting for next pick…':'set your slot above to get recommendations'}</div>`;

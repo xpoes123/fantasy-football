@@ -108,7 +108,7 @@ def render(draft, picks, players, idx, slot, umap):
             star = "➤ " if i == 0 else "  "
             print(f"{star}{POSC.get(p['pos'],'')}{p['pos']:3}{C['r']} {p['name'][:22]:22}"
                   f" {C['dim']}vor{C['r']}{p['vor']:6.0f} {C['dim']}adp{C['r']}{p['adp']:6.1f}"
-                  f"  {C['dim']}E[roster]{C['r']}{rr['exp_value']:7.0f}")
+                  f"  {C['dim']}E[wins]{C['r']}{rr['exp_value']:6.1f}")
         # scarcity note: cliff at your top need positions
         picks_left = len([pk for pk in my_picks_no if pk >= cur])
         cliff_note(players, drafted, needs(my_roster, picks_left))
