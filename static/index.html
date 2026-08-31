@@ -116,12 +116,14 @@
 
 <script>
 const $ = id => document.getElementById(id);
+// escape API-sourced strings (player names, opponent team names) before innerHTML — leaguemates control team names
+const esc = s => s==null?'':String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const posEl = p => `<span class="pos" style="color:var(--${p});background:color-mix(in srgb,var(--${p}) 15%,transparent)">${p}</span>`;
 const slotInput = $('slot');
 slotInput.value = localStorage.getItem('slot') || '';
 slotInput.oninput = () => { localStorage.setItem('slot', slotInput.value); tick(); };
 
-function injTag(s){ return s ? ` <span class="inj">${s}</span>` : ''; }
+function injTag(s){ return s ? ` <span class="inj">${esc(s)}</span>` : ''; }
 // survival-to-your-next-pick badge (bucketed per the turn-strategy spec)
 function survBadge(s){
   if(s==null) return '';
@@ -158,7 +160,7 @@ function render(s){
   const elBits=['RB','WR','TE','QB'].filter(p=>el[p]!=null).map(p=>`${p}:${el[p]} elite left`).join('  ·  ');
   if(s.runs && s.runs.length){
     rb.style.display='block';
-    rb.innerHTML=`⚠ ${s.runs.join(' & ')} run in progress — grab the last elite before the cliff${elBits?'  ·  '+elBits:''}`;
+    rb.innerHTML=`⚠ ${esc(s.runs.join(' & '))} run in progress — grab the last elite before the cliff${elBits?'  ·  '+esc(elBits):''}`;
   } else if(elBits){ rb.style.display='block'; rb.style.background='transparent'; rb.style.border='0'; rb.style.color='var(--dim)'; rb.innerHTML=elBits; }
   else { rb.style.display='none'; }
 
@@ -166,7 +168,7 @@ function render(s){
   const recRow=(r,i,top)=>`
       <div class="rec ${top?'top':''}">
         <span class="rk">${top?'➤':i}</span>${posEl(r.pos)}
-        <span class="nm">${r.name}${r.stack?' <span class="stack" title="stacks with your roster (QB↔pass-catcher)">🔗 stack</span>':''}${injTag(r.inj)}</span>
+        <span class="nm">${esc(r.name)}${r.stack?' <span class="stack" title="stacks with your roster (QB↔pass-catcher)">🔗 stack</span>':''}${injTag(r.inj)}</span>
         ${survBadge(r.survive)}
         <span class="meta"><b>vor</b> ${Math.round(r.vor)} &nbsp;<b>adp</b> ${r.adp.toFixed(1)}</span>
         <span class="exp" title="expected regular-season wins">${r.exp.toFixed(1)}w</span>
@@ -174,7 +176,7 @@ function render(s){
   if(s.recommendations && s.recommendations.length){
     let html='';
     if(s.pair && s.pair.length>=2)
-      html+=`<div class="pairplan">🎯 plan for your turn (#${s.my_next}${s.my_next?'+'+(s.my_next+1):''}): <b>${s.pair[0]}</b> + <b>${s.pair[1]}</b></div>`;
+      html+=`<div class="pairplan">🎯 plan for your turn (#${s.my_next}${s.my_next?'+'+(s.my_next+1):''}): <b>${esc(s.pair[0])}</b> + <b>${esc(s.pair[1])}</b></div>`;
     html+=s.recommendations.map((r,i)=>recRow(r,i+1,i===0)).join('');
     if(s.fallers && s.fallers.length){
       html+=`<div class="fallhdr">snap if they fall to you</div>`;
@@ -185,18 +187,18 @@ function render(s){
     $('recs').innerHTML = `<div class="cliff">${s.slot? 'waiting for next pick…':'set your slot above to get recommendations'}</div>`;
   }
   $('cliffs').innerHTML = (s.cliffs||[]).map(c=>
-    `<div class="cliff ${c.steep?'steep':''}">${c.pos} cliff: ${c.name} → −${c.drop} vor to 3rd ${c.steep?'◀ grab now':''}</div>`).join('');
+    `<div class="cliff ${c.steep?'steep':''}">${esc(c.pos)} cliff: ${esc(c.name)} → −${c.drop} vor to 3rd ${c.steep?'◀ grab now':''}</div>`).join('');
 
   // best available
   const myByes=new Set(Object.keys(s.bye_warn||{}).map(Number));
   $('avail').innerHTML = s.best_available.map(p=>`
-    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}${p.stack?' <span class="stack" title="stacks with your roster">🔗</span>':''}${p.block?` <span class="block" title="handcuff to ${p.block.owner}'s ${p.block.stud} — leverage play">🔒 ${p.block.owner}</span>`:''}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${injTag(p.inj)}</span>
+    <div class="row">${posEl(p.pos)}<span class="nm">${esc(p.name)}${p.stack?' <span class="stack" title="stacks with your roster">🔗</span>':''}${p.block?` <span class="block" title="handcuff to ${esc(p.block.owner)}'s ${esc(p.block.stud)} — leverage play">🔒 ${esc(p.block.owner)}</span>`:''}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${injTag(p.inj)}</span>
       ${survBadge(p.survive)}
-      <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${p.team||''}${p.bye?` <span class="${myByes.has(p.bye)?'byeclash':'byetag'}" title="bye week ${p.bye}${myByes.has(p.bye)?' — you already have players on this bye':''}">B${p.bye}</span>`:''}</span></div>`).join('');
+      <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${esc(p.team||'')}${p.bye?` <span class="${myByes.has(p.bye)?'byeclash':'byetag'}" title="bye week ${p.bye}${myByes.has(p.bye)?' — you already have players on this bye':''}">B${p.bye}</span>`:''}</span></div>`).join('');
 
   // roster + needs
   $('roster').innerHTML = s.my_roster.length ? s.my_roster.map(p=>`
-    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}${p.hc?` <span class="hc" title="handcuff — grab as insurance">hc:${p.hc}</span>`:''}</span><span class="meta">${p.bye?'B'+p.bye+' ':''}${p.pts}</span></div>`).join('')
+    <div class="row">${posEl(p.pos)}<span class="nm">${esc(p.name)}${p.hc?` <span class="hc" title="handcuff — grab as insurance">hc:${esc(p.hc)}</span>`:''}</span><span class="meta">${p.bye?'B'+p.bye+' ':''}${p.pts}</span></div>`).join('')
     : '<div class="cliff">no picks yet</div>';
   const bw=s.bye_warn||{};
   const bwk=Object.keys(bw);
@@ -209,7 +211,7 @@ function render(s){
 
   // recent
   $('recent').innerHTML = (s.recent||[]).map(r=>
-    `<div><span class="p">#${r.pick} ${r.pos}</span> ${r.name} <span class="p">→ ${r.who}</span></div>`).join('');
+    `<div><span class="p">#${r.pick} ${esc(r.pos)}</span> ${esc(r.name)} <span class="p">→ ${esc(r.who)}</span></div>`).join('');
 }
 
 async function tick(){
