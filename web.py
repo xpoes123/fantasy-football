@@ -78,6 +78,22 @@ def compute_state(slot_override):
     recent0 = [(p.get("metadata") or {}).get("position") for p in picks[-config.OPP_RUN_K:]]
     recent0 = [x for x in recent0 if x]
     order_rev = {v: k for k, v in order.items()}
+
+    # leverage: available handcuffs to OPPONENTS' rostered RBs — "take their backup" plays
+    def _pname(p):
+        return (idx.get(p["player_id"]) or {}).get("name") or (
+            ((p.get("metadata") or {}).get("first_name", "") + " " +
+             (p.get("metadata") or {}).get("last_name", "")).strip())
+    drafted_nms = {_pname(p).lower() for p in picks}
+    block = {}   # handcuff name (lower) -> owning team label + their stud
+    for p in picks:
+        ds = p.get("draft_slot")
+        if not ds or ds == slot:
+            continue
+        hc = overrides.HANDCUFFS.get(_pname(p))
+        if hc and hc.lower() not in drafted_nms:
+            owner = umap.get(order_rev.get(ds)) or f"slot {ds}"
+            block[hc.lower()] = {"owner": owner, "stud": _pname(p)}
     on_team = umap.get(order_rev.get(on_slot)) if order_rev else None
 
     my_next = my_roster = recs = cliffs = need = fallers = pair = None
@@ -150,7 +166,7 @@ def compute_state(slot_override):
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
                             "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"], "bye": p.get("bye"),
                             "survive": surv_all.get(p["pid"]), "cliff": p["pid"] in cliff_pids,
-                            "stack": _stack(p)}
+                            "stack": _stack(p), "block": block.get(p["name"].lower())}
                            for p in avail[:18]],
         "my_roster": [{"pos": p["pos"], "name": p["name"], "pts": round(p["adj_proj"]),
                        "bye": p.get("bye"), "hc": overrides.HANDCUFFS.get(p["name"])}
