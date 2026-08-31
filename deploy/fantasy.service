@@ -1,0 +1,14 @@
+[Unit]
+Description=fantasy.djiang.xyz — draft advisor (FastAPI)
+After=network.target
+
+[Service]
+Type=exec
+WorkingDirectory=/opt/fantasy
+ExecStart=/opt/fantasy/.venv/bin/uvicorn web:app --host 127.0.0.1 --port 7793 --workers 1
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/fantasy/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+# Append to /etc/caddy/Caddyfile then: systemctl reload caddy
+fantasy.djiang.xyz {
+    reverse_proxy 127.0.0.1:7793
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}

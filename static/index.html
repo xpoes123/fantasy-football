@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Draft Advisor — Touchdowns and Transactions</title>
+<style>
+  :root{
+    --bg:#1a1b26; --panel:#1f2335; --panel2:#24283b; --line:#2f334d;
+    --fg:#c0caf5; --dim:#565f89; --mut:#787c99;
+    --blue:#7aa2f7; --purple:#bb9af7; --cyan:#7dcfff; --green:#9ece6a;
+    --red:#f7768e; --orange:#ff9e64; --yellow:#e0af68; --teal:#73daca;
+    --RB:#ff9e64; --WR:#7aa2f7; --QB:#bb9af7; --TE:#9ece6a; --K:#565f89; --DEF:#565f89;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.4 ui-monospace,"JetBrains Mono",Menlo,monospace}
+  a{color:var(--blue)}
+  header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:15px;margin:0;font-weight:600;color:var(--cyan)}
+  .pick{font-size:22px;font-weight:700;color:var(--fg)}
+  .pick small{font-size:12px;color:var(--dim);font-weight:400}
+  .banner{padding:5px 14px;border-radius:6px;font-weight:700;letter-spacing:.5px}
+  .mine{background:var(--green);color:#12131c;animation:pulse 1.4s infinite}
+  .waiting{background:var(--panel2);color:var(--mut)}
+  @keyframes pulse{50%{opacity:.55}}
+  .spacer{flex:1}
+  label{color:var(--dim);font-size:12px}
+  input{background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+    border-radius:5px;padding:4px 7px;width:52px;font:inherit;text-align:center}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;
+    margin-right:5px;vertical-align:middle}
+  main{display:grid;grid-template-columns:1.15fr 1fr .85fr;gap:14px;padding:14px 18px;
+    max-width:1500px;margin:0 auto}
+  @media(max-width:1000px){main{grid-template-columns:1fr}}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+  h2{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);
+    margin:0 0 10px;font-weight:600}
+  .rec{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:7px;
+    background:var(--panel2);margin-bottom:7px;border:1px solid transparent}
+  .rec.top{border-color:var(--green);background:#1e2a1f}
+  .rec .rk{color:var(--dim);width:16px;text-align:center;font-weight:700}
+  .rec.top .rk{color:var(--green)}
+  .pos{font-weight:700;width:34px;text-align:center;border-radius:4px;padding:1px 0;font-size:12px}
+  .nm{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meta{color:var(--dim);font-size:12px;white-space:nowrap}
+  .meta b{color:var(--mut);font-weight:600}
+  .exp{color:var(--teal);font-weight:700;font-size:13px;min-width:56px;text-align:right}
+  .row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid #23263b}
+  .row:last-child{border:0}
+  .inj{color:var(--yellow);font-size:11px}
+  .cliff{font-size:12px;color:var(--dim);padding:3px 0}
+  .cliff.steep{color:var(--yellow)}
+  .needs{font-size:13px;color:var(--yellow);margin-top:8px}
+  .needs.full{color:var(--green)}
+  .recent{font-size:12.5px;color:var(--mut)}
+  .recent .p{color:var(--dim)}
+  #err{color:var(--red);padding:0 18px}
+  .foot{color:var(--dim);font-size:11px;text-align:center;padding:8px}
+  .sleeper{color:var(--cyan);text-decoration:none;border:1px solid var(--line);
+    padding:4px 9px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>DRAFT ADVISOR</h1>
+  <div class="pick" id="pick">—</div>
+  <div id="banner" class="banner waiting">connecting…</div>
+  <div class="spacer"></div>
+  <label>your slot <input id="slot" type="number" min="1" max="12" placeholder="auto"></label>
+  <a class="sleeper" href="https://sleeper.com/draft/nfl/1395399705847947264" target="_blank" rel="noopener">open sleeper ↗</a>
+  <span><span class="dot" id="live"></span><span id="clock" style="color:var(--dim);font-size:12px"></span></span>
+</header>
+<div id="err"></div>
+<main>
+  <section>
+    <h2>Recommended — your pick</h2>
+    <div id="recs"><div class="cliff">waiting for your slot / next pick…</div></div>
+    <div id="cliffs" style="margin-top:10px"></div>
+  </section>
+  <section>
+    <h2>Best available</h2>
+    <div id="avail"></div>
+  </section>
+  <section>
+    <h2>Your roster</h2>
+    <div id="roster"></div>
+    <div class="needs" id="needs"></div>
+    <h2 style="margin-top:16px">Recent picks</h2>
+    <div id="recent" class="recent"></div>
+  </section>
+</main>
+<div class="foot">VOR + Monte-Carlo · projections ESPN · Vegas Odds API · live Sleeper feed</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const posEl = p => `<span class="pos" style="color:var(--${p});background:color-mix(in srgb,var(--${p}) 15%,transparent)">${p}</span>`;
+const slotInput = $('slot');
+slotInput.value = localStorage.getItem('slot') || '';
+slotInput.oninput = () => { localStorage.setItem('slot', slotInput.value); tick(); };
+
+function injTag(s){ return s ? ` <span class="inj">${s}</span>` : ''; }
+
+function render(s){
+  $('err').textContent = '';
+  $('pick').innerHTML = `${s.round}.${String(s.in_round).padStart(2,'0')} <small>#${s.overall}/${s.total}</small>`;
+  const b = $('banner');
+  if(s.is_mine){ b.className='banner mine'; b.textContent='● YOUR PICK'; }
+  else if(s.status!=='drafting' && s.status!=='in_progress'){ b.className='banner waiting'; b.textContent=s.status.replace('_',' '); }
+  else { b.className='banner waiting'; b.textContent = 'on clock: ' + (s.on_team || ('slot '+s.on_slot)); }
+  if(s.my_next) b.textContent += `  ·  your next #${s.my_next}` + (s.picks_away? ` (${s.picks_away} away)`:'');
+
+  // recommendations
+  if(s.recommendations && s.recommendations.length){
+    $('recs').innerHTML = s.recommendations.map((r,i)=>`
+      <div class="rec ${i===0?'top':''}">
+        <span class="rk">${i===0?'➤':i+1}</span>${posEl(r.pos)}
+        <span class="nm">${r.name}${injTag(r.inj)}</span>
+        <span class="meta"><b>vor</b> ${Math.round(r.vor)} &nbsp;<b>adp</b> ${r.adp.toFixed(1)}</span>
+        <span class="exp">${Math.round(r.exp)}</span>
+      </div>`).join('');
+  } else {
+    $('recs').innerHTML = `<div class="cliff">${s.slot? 'waiting for next pick…':'set your slot above to get recommendations'}</div>`;
+  }
+  $('cliffs').innerHTML = (s.cliffs||[]).map(c=>
+    `<div class="cliff ${c.steep?'steep':''}">${c.pos} cliff: ${c.name} → −${c.drop} vor to 3rd ${c.steep?'◀ grab now':''}</div>`).join('');
+
+  // best available
+  $('avail').innerHTML = s.best_available.map(p=>`
+    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}${injTag(p.inj)}</span>
+      <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${p.team||''}</span></div>`).join('');
+
+  // roster + needs
+  $('roster').innerHTML = s.my_roster.length ? s.my_roster.map(p=>`
+    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}</span><span class="meta">${p.pts}</span></div>`).join('')
+    : '<div class="cliff">no picks yet</div>';
+  const nd = s.needs||[];
+  const ne = $('needs');
+  if(!s.slot){ ne.textContent=''; }
+  else if(nd.length){ ne.className='needs'; ne.textContent='need: '+nd.join(' '); }
+  else { ne.className='needs full'; ne.textContent='✓ starters full — best available'; }
+
+  // recent
+  $('recent').innerHTML = (s.recent||[]).map(r=>
+    `<div><span class="p">#${r.pick} ${r.pos}</span> ${r.name} <span class="p">→ ${r.who}</span></div>`).join('');
+}
+
+async function tick(){
+  try{
+    const slot = slotInput.value || 0;
+    const r = await fetch(`/api/state?slot=${slot}`);
+    const s = await r.json();
+    if(s.error){ $('err').textContent = 'error: '+s.error; return; }
+    render(s);
+    $('live').style.background = 'var(--green)';
+    $('clock').textContent = new Date().toLocaleTimeString();
+  }catch(e){
+    $('err').textContent = 'connection lost — retrying…';
+    $('live').style.background = 'var(--red)';
+  }
+}
+tick();
+setInterval(tick, 4000);
+</script>
+</body>
+</html>
