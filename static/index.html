@@ -57,6 +57,9 @@
   .s-slip{color:var(--orange);background:color-mix(in srgb,var(--orange) 15%,transparent)}
   .s-gone{color:var(--red);background:color-mix(in srgb,var(--red) 16%,transparent)}
   .cliffmark{color:var(--red);font-weight:700;font-size:11px}
+  .hc{color:var(--dim);font-size:11px}
+  .byetag{color:var(--dim);font-size:10px;border:1px solid var(--line);border-radius:3px;padding:0 3px}
+  .byeclash{color:var(--red);font-size:10px;border:1px solid var(--red);border-radius:3px;padding:0 3px;font-weight:700}
   .runbar{background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange);
     border:1px solid var(--orange);border-radius:6px;padding:5px 10px;margin:0 18px 8px;
     font-size:12.5px;font-weight:600}
@@ -170,15 +173,19 @@ function render(s){
     `<div class="cliff ${c.steep?'steep':''}">${c.pos} cliff: ${c.name} → −${c.drop} vor to 3rd ${c.steep?'◀ grab now':''}</div>`).join('');
 
   // best available
+  const myByes=new Set(Object.keys(s.bye_warn||{}).map(Number));
   $('avail').innerHTML = s.best_available.map(p=>`
     <div class="row">${posEl(p.pos)}<span class="nm">${p.name}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${injTag(p.inj)}</span>
       ${survBadge(p.survive)}
-      <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${p.team||''}</span></div>`).join('');
+      <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${p.team||''}${p.bye?` <span class="${myByes.has(p.bye)?'byeclash':'byetag'}" title="bye week ${p.bye}${myByes.has(p.bye)?' — you already have players on this bye':''}">B${p.bye}</span>`:''}</span></div>`).join('');
 
   // roster + needs
   $('roster').innerHTML = s.my_roster.length ? s.my_roster.map(p=>`
-    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}</span><span class="meta">${p.pts}</span></div>`).join('')
+    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}${p.hc?` <span class="hc" title="handcuff — grab as insurance">hc:${p.hc}</span>`:''}</span><span class="meta">${p.bye?'B'+p.bye+' ':''}${p.pts}</span></div>`).join('')
     : '<div class="cliff">no picks yet</div>';
+  const bw=s.bye_warn||{};
+  const bwk=Object.keys(bw);
+  $('roster').innerHTML += bwk.length ? `<div class="cliff steep" style="margin-top:6px">⚠ stacked bye: ${bwk.map(w=>`Wk${w} (${bw[w]})`).join(', ')}</div>` : '';
   const nd = s.needs||[];
   const ne = $('needs');
   if(!s.slot){ ne.textContent=''; }

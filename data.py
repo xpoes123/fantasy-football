@@ -21,6 +21,14 @@ NFL_ABBR = {  # Odds API full name -> Sleeper team abbrev
     "Tennessee Titans":"TEN","Washington Commanders":"WAS",
 }
 
+# 2026 bye weeks by team (from Sharp Football / FantasyPros). Used to flag stacked byes.
+BYES = {
+    "KC":5,"CAR":5, "CIN":6,"MIA":6,"DET":6,"MIN":6, "BUF":7,"LAC":7,"WAS":7,"JAX":7,
+    "SF":8,"NYG":8,"NO":8,"HOU":8, "PIT":9,"TEN":9, "CHI":10,"DEN":10,"TB":10,"PHI":10,
+    "CLE":11,"ATL":11,"GB":11,"NE":11,"LAR":11,"SEA":11, "IND":13,"NYJ":13,"LV":13,"BAL":13,
+    "ARI":14,"DAL":14,
+}
+
 # replacement rank per position given 12-team league demand (starters + flex share).
 # PPR-neutral: the 2 FLEX slots skew WR in PPR, so WR replacement sits DEEPER than RB.
 REPL_RANK = {"QB":12, "RB":30, "WR":40, "TE":13, "K":12, "DEF":12}
@@ -218,7 +226,7 @@ def build_players():
             "pid": pid, "name": name, "pos": pos, "team": m.get("team"),
             "age": m.get("age"), "inj": m.get("injury_status"),
             "proj": round(proj, 1), "adj_proj": round(adj, 1),
-            "adp": adp if adp else 999.0,
+            "adp": adp if adp else 999.0, "bye": BYES.get(m.get("team")),
         })
 
     # VOR = adj_proj - replacement-level adj_proj at position

@@ -10,7 +10,17 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
 
-import config, data, engine, live
+import config, data, engine, live, overrides
+
+
+def _bye_warn(roster):
+    """Weeks where 2+ of my players share a bye — surfaces the stacked-bye traps."""
+    byes = {}
+    for p in roster or []:
+        b = p.get("bye")
+        if b:
+            byes[b] = byes.get(b, 0) + 1
+    return {str(wk): n for wk, n in sorted(byes.items()) if n >= 2}
 
 app = FastAPI()
 _lock = threading.Lock()
@@ -105,12 +115,13 @@ def compute_state(slot_override):
         "picks_away": (my_next - cur) if my_next else None,
         "is_mine": (slot is not None and on_slot == slot),
         "recommendations": recs, "cliffs": cliffs, "needs": need,
-        "runs": runs, "elites_left": elites_left,
+        "runs": runs, "elites_left": elites_left, "bye_warn": _bye_warn(my_roster),
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
-                            "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"],
+                            "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"], "bye": p.get("bye"),
                             "survive": surv_all.get(p["pid"]), "cliff": p["pid"] in cliff_pids}
                            for p in avail[:18]],
-        "my_roster": [{"pos": p["pos"], "name": p["name"], "pts": round(p["adj_proj"])}
+        "my_roster": [{"pos": p["pos"], "name": p["name"], "pts": round(p["adj_proj"]),
+                       "bye": p.get("bye"), "hc": overrides.HANDCUFFS.get(p["name"])}
                       for p in sorted(my_roster or [], key=lambda x: (x["pos"], -x["adj_proj"]))],
         "recent": [{"pick": p["pick_no"], "pos": p.get("metadata", {}).get("position", "?"),
                     "name": (p.get("metadata", {}).get("first_name", "") + " " +

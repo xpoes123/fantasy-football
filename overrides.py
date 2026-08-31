@@ -28,6 +28,25 @@ GAMES_MISSED = {
     "Jayden Higgins": 17,   # torn ACL (Aug 18) — season over
 }
 
+# starter RB -> the backup who inherits the workload (from a 2026 handcuff research sweep).
+# Shown next to your rostered RBs so you know who to grab as insurance.
+HANDCUFFS = {
+    "Kyren Williams": "Blake Corum",
+    "Christian McCaffrey": "Jordan James",
+    "Josh Jacobs": "MarShawn Lloyd",
+    "Alvin Kamara": "Kendre Miller",
+    "James Conner": "Trey Benson",
+    "Ashton Jeanty": "Raheem Mostert",
+    "De'Von Achane": "Jaylen Wright",
+    "Saquon Barkley": "Tank Bigsby",
+    "Bucky Irving": "Kenny Gainwell",
+    "Cam Skattebo": "Tyrone Tracy",
+    "Jahmyr Gibbs": "Craig Reynolds",
+    "Bijan Robinson": "Tyler Allgeier",
+    "Derrick Henry": "Justice Hill",
+    "Jonathan Taylor": "Tyler Goodson",
+}
+
 # Projection multipliers from OC-scheme + role/value research (averaged across two passes).
 BUMP = {
     "MarShawn Lloyd": 1.15,
