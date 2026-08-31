@@ -29,6 +29,19 @@ BYES = {
     "ARI":14,"DAL":14,
 }
 
+# Strength-of-schedule multiplier by team (season DVP + fantasy-playoff Wk15-17), from the
+# SOS research sweep. A tiebreaker (±5% max) — good playoff slates up, brutal ones down.
+# ponytail: team-level flat; a per-position×week DVP engine off nflverse is the later upgrade.
+SOS_TEAM = {
+    "ATL":1.05, "ARI":1.05, "DET":1.05, "MIN":1.04, "LAC":1.03, "NO":1.03, "IND":1.03,
+    "TB":1.01, "BAL":0.98, "KC":0.97, "HOU":0.97, "SEA":0.97, "SF":0.96, "PHI":0.95,
+}
+
+# Coaching-prowess multiplier by team: staff/play-caller QUALITY (scheming players open,
+# play-calling, RZ, development, in-game adjustments) — an axis beyond scheme volume and
+# Vegas. Small (±4%). Populated from the coaching-prowess research sweep.
+COACHING = {}
+
 # replacement rank per position given 12-team league demand (starters + flex share).
 # PPR-neutral: the 2 FLEX slots skew WR in PPR, so WR replacement sits DEEPER than RB.
 REPL_RANK = {"QB":12, "RB":30, "WR":40, "TE":13, "K":12, "DEF":12}
@@ -221,6 +234,8 @@ def build_players():
         adj *= env.get(m.get("team"), 1.0)
         adj *= age_mult(pos, m.get("age"))
         adj *= injury_mult(name, m.get("injury_status"))
+        adj *= SOS_TEAM.get(m.get("team"), 1.0)
+        adj *= COACHING.get(m.get("team"), 1.0)
         adj *= _BUMP_CI.get(name.lower(), 1.0)
         players.append({
             "pid": pid, "name": name, "pos": pos, "team": m.get("team"),
