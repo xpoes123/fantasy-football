@@ -191,6 +191,7 @@ def age_mult(pos, age):
 # case-insensitive views of the manual override dicts (docstring promised this)
 _GM_CI = {k.lower(): v for k, v in overrides.GAMES_MISSED.items()}
 _BUMP_CI = {k.lower(): v for k, v in overrides.BUMP.items()}
+_WEDGE_CI = {k.lower(): v for k, v in overrides.WEDGES.items()}
 
 # Preseason roster-technicality tags (NA/DNR/PUP) are mostly noise, not "will miss N games"
 # — don't nuke a startable player off a paperwork tag. IR is real but often not season-long.
@@ -242,6 +243,7 @@ def build_players():
         adj *= SOS_TEAM.get(m.get("team"), 1.0)
         adj *= COACHING.get(m.get("team"), 1.0)
         adj *= _BUMP_CI.get(name.lower(), 1.0)
+        adj *= _WEDGE_CI.get(name.lower(), 1.0)
         players.append({
             "pid": pid, "name": name, "pos": pos, "team": m.get("team"),
             "age": m.get("age"), "inj": m.get("injury_status"),
