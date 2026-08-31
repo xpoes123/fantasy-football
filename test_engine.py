@@ -27,7 +27,10 @@ def test_start_value():
 
 
 def test_needs():
-    assert set(live.needs([])) == {"QB", "RB", "WR", "TE", "K", "DEF", "FLEX"}
+    # early draft (lots of picks left): K/DEF are hidden until the endgame
+    assert set(live.needs([])) == {"QB", "RB", "WR", "TE", "FLEX"}
+    # endgame (few picks left): K/DEF now appear
+    assert set(live.needs([], picks_left=2)) == {"QB", "RB", "WR", "TE", "K", "DEF", "FLEX"}
     # two RBs fills both RB slots; still need everything else + flex
     nd = live.needs([p("RB", 200), p("RB", 100)])
     assert "RB" not in nd and nd.count("FLEX") == 2

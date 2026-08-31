@@ -39,14 +39,30 @@ def board_state(players):
     return idx
 
 
-def needs(roster):
-    """Which starter slots are still unfilled, given greedy assignment."""
+def resolve_pick(p, idx):
+    """A drafted pick -> a player dict. Uses our board if present, else a stub from the
+    pick's own metadata so YOUR pick never vanishes from the roster (which would break needs)."""
+    pl = idx.get(p["player_id"])
+    if pl:
+        return pl
+    m = p.get("metadata", {})
+    return {"pid": p["player_id"], "pos": m.get("position", "?"),
+            "name": (m.get("first_name", "") + " " + m.get("last_name", "")).strip() or "(pick)",
+            "team": m.get("team"), "adj_proj": 40.0, "vor": 0.0, "adp": 999.0, "inj": None}
+
+
+def needs(roster, picks_left=99):
+    """Which starter slots are still unfilled, given greedy assignment. K/DEF are hidden
+    until the endgame (mirrors the engine's allow_kdef) so they don't clutter needs/cliffs."""
     cnt = {}
     for p in roster:
         cnt[p["pos"]] = cnt.get(p["pos"], 0) + 1
+    endgame = picks_left <= (("K" not in cnt) + ("DEF" not in cnt) + 1)
     left = []
     for pos, n in config.SLOTS.items():
         if pos == "FLEX":
+            continue
+        if pos in ("K", "DEF") and not endgame:
             continue
         short = n - cnt.get(pos, 0)
         left += [pos] * max(0, short)
@@ -62,12 +78,11 @@ def render(draft, picks, players, idx, slot, umap):
     cur = n + 1
     rnd = (cur - 1) // teams + 1
     in_rnd = (cur - 1) % teams + 1
-    on_slot = slot_on_clock(cur, teams)
+    on_slot = slot_on_clock(cur, teams) if cur <= teams * rounds else None
     drafted = {p["player_id"] for p in picks}
     my_picks_no = engine.snake_picks(slot) if slot else []
     my_next = next((pk for pk in my_picks_no if pk >= cur), None)
-    my_roster = [idx[p["player_id"]] for p in picks
-                 if p.get("draft_slot") == slot and p["player_id"] in idx]
+    my_roster = [resolve_pick(p, idx) for p in picks if p.get("draft_slot") == slot]
 
     order_rev = {v: k for k, v in (draft.get("draft_order") or {}).items()}
     on_team = umap.get(order_rev.get(on_slot), f"slot {on_slot}") if order_rev else f"slot {on_slot}"
@@ -95,7 +110,8 @@ def render(draft, picks, players, idx, slot, umap):
                   f" {C['dim']}vor{C['r']}{p['vor']:6.0f} {C['dim']}adp{C['r']}{p['adp']:6.1f}"
                   f"  {C['dim']}E[roster]{C['r']}{rr['exp_value']:7.0f}")
         # scarcity note: cliff at your top need positions
-        cliff_note(players, drafted, needs(my_roster))
+        picks_left = len([pk for pk in my_picks_no if pk >= cur])
+        cliff_note(players, drafted, needs(my_roster, picks_left))
         print()
 
     # best available
@@ -113,7 +129,7 @@ def render(draft, picks, players, idx, slot, umap):
         print(f"\n{C['hd']}── YOUR ROSTER ({len(my_roster)}) ──{C['r']}")
         for p in sorted(my_roster, key=lambda x: (x["pos"], -x["adj_proj"])):
             print(f"  {POSC.get(p['pos'],'')}{p['pos']:3}{C['r']} {p['name'][:22]:22} {C['dim']}{p['adj_proj']:.0f}{C['r']}")
-        nd = needs(my_roster)
+        nd = needs(my_roster, len([pk for pk in my_picks_no if pk >= cur]))
         print(f"  {C['warn']}need: {' '.join(nd) if nd else 'starters full — best available'}{C['r']}")
 
     # recent picks (spot runs)

@@ -43,7 +43,11 @@ def compute_state(slot_override):
     picks = _api(f"draft/{config.DRAFT_ID}/picks")
 
     order = draft.get("draft_order") or {}
-    slot = slot_override or order.get(config.MY_USER_ID)
+    # Real draft_order WINS over the manual box once the draft is live, so a stale/typed
+    # slot can't silently mislabel your team all night. Manual only fills the pre-draft gap.
+    auto = order.get(config.MY_USER_ID)
+    slot = auto or slot_override
+    slot_source = "auto" if auto else ("manual" if slot_override else None)
     key = (len(picks), slot)
     if _cache["key"] == key and _cache["state"] is not None:
         return _cache["state"]
@@ -60,9 +64,11 @@ def compute_state(slot_override):
     if slot:
         my_all = engine.snake_picks(slot)
         my_next = next((pk for pk in my_all if pk >= cur), None)
-        my_roster = [idx[p["player_id"]] for p in picks
-                     if p.get("draft_slot") == slot and p["player_id"] in idx]
-        need = live.needs(my_roster)
+        # resolve MY picks even if a drafted player isn't on our board — never lose your own
+        # pick from the roster (that would make needs() think the slot is still open).
+        my_roster = [live.resolve_pick(p, idx) for p in picks if p.get("draft_slot") == slot]
+        picks_left = len([pk for pk in my_all if pk >= cur])
+        need = live.needs(my_roster, picks_left)
         if my_next:
             rolls = 60 if on_slot == slot else 35
             r = engine.recommend(players, drafted, my_roster, slot, my_next,
@@ -79,7 +85,7 @@ def compute_state(slot_override):
         "draft_name": draft["metadata"]["name"], "status": draft["status"],
         "overall": cur, "round": (cur - 1) // teams + 1, "in_round": (cur - 1) % teams + 1,
         "total": teams * rounds, "on_slot": on_slot, "on_team": on_team,
-        "slot": slot, "my_next": my_next,
+        "slot": slot, "slot_source": slot_source, "my_next": my_next,
         "picks_away": (my_next - cur) if my_next else None,
         "is_mine": (slot is not None and on_slot == slot),
         "recommendations": recs, "cliffs": cliffs, "needs": need,

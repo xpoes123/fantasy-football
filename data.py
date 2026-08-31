@@ -21,22 +21,33 @@ NFL_ABBR = {  # Odds API full name -> Sleeper team abbrev
     "Tennessee Titans":"TEN","Washington Commanders":"WAS",
 }
 
-# replacement rank per position given 12-team league demand (starters + flex share)
-REPL_RANK = {"QB":12, "RB":36, "WR":35, "TE":13, "K":12, "DEF":12}
+# replacement rank per position given 12-team league demand (starters + flex share).
+# PPR-neutral: the 2 FLEX slots skew WR in PPR, so WR replacement sits DEEPER than RB.
+REPL_RANK = {"QB":12, "RB":30, "WR":40, "TE":13, "K":12, "DEF":12}
 
 
 def _get(url, headers=None, ttl=86400):
-    """GET with a simple on-disk cache keyed by url. ttl seconds."""
+    """GET with a simple on-disk cache keyed by url. ttl seconds.
+    On a fetch failure, serve stale cache if we have any — so a mid-draft restart or
+    upstream hiccup can't take the tool down."""
     key = os.path.join(CACHE, urllib.parse.quote(url, safe="")[:180] + ".json")
     if os.path.exists(key) and time.time() - os.path.getmtime(key) < ttl:
         with open(key) as f:
             return json.load(f)
-    req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        data = json.load(r)
-    with open(key, "w") as f:
-        json.dump(data, f)
-    return data
+    try:
+        hdrs = {"User-Agent": "Mozilla/5.0 (draft-advisor)"}  # api.sleeper.com 403s urllib's default UA
+        hdrs.update(headers or {})
+        req = urllib.request.Request(url, headers=hdrs)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.load(r)
+        with open(key, "w") as f:
+            json.dump(data, f)
+        return data
+    except Exception:
+        if os.path.exists(key):          # stale is better than dead during a live draft
+            with open(key) as f:
+                return json.load(f)
+        raise
 
 
 def sleeper_players(ttl=86400):
@@ -77,6 +88,20 @@ def espn_proj_adp(ttl=21600):
         if pos and p.get("fullName"):
             by_name[_norm(p["fullName"]) + "|" + pos] = rec
     return by_id, by_name
+
+
+def rotowire_proj(ttl=21600):
+    """Sleeper's own RotoWire projections — primary source. Returns
+    player_id(str) -> {proj, adp}. Keyed on the SAME Sleeper id we join meta on, so no
+    fuzzy name-join, and it covers K/DEF (real DST projections, unlike ESPN)."""
+    out = {}
+    for pos in ("QB", "RB", "WR", "TE", "K", "DEF"):
+        url = ("https://api.sleeper.com/projections/nfl/2026"
+               f"?season_type=regular&position[]={pos}&order_by=pts_ppr")
+        for row in _get(url, ttl=ttl):
+            st = row.get("stats") or {}
+            out[str(row["player_id"])] = {"proj": st.get("pts_ppr"), "adp": st.get("adp_ppr")}
+    return out
 
 
 def team_env(ttl=21600):
@@ -137,12 +162,20 @@ def age_mult(pos, age):
     return 1.0
 
 
+# case-insensitive views of the manual override dicts (docstring promised this)
+_GM_CI = {k.lower(): v for k, v in overrides.GAMES_MISSED.items()}
+_BUMP_CI = {k.lower(): v for k, v in overrides.BUMP.items()}
+
+# Preseason roster-technicality tags (NA/DNR/PUP) are mostly noise, not "will miss N games"
+# — don't nuke a startable player off a paperwork tag. IR is real but often not season-long.
+_INJ_GM = {"IR": 6, "Out": 1, "Doubtful": 1, "PUP": 2, "Sus": 3, "NA": 0, "DNR": 0}
+
+
 def injury_mult(name, status):
-    """Games-missed haircut. overrides.GAMES_MISSED wins; else map Sleeper status."""
-    gm = overrides.GAMES_MISSED.get(name)
+    """Games-missed haircut. overrides.GAMES_MISSED (case-insensitive) wins; else map status."""
+    gm = _GM_CI.get(name.lower())
     if gm is None:
-        gm = {"IR": 8, "Out": 2, "Doubtful": 1, "PUP": 6, "Sus": 3,
-              "NA": 4}.get(status, 0)
+        gm = _INJ_GM.get(status, 0)
     return max(0.0, (17 - gm) / 17)
 
 
@@ -150,36 +183,37 @@ def build_players():
     """Return list of player dicts with adj_proj and vor, sorted by vor desc.
     Only skill positions + K/DEF that have a projection or are draftable."""
     sl = sleeper_players()
-    espn_id, espn_name = espn_proj_adp()
+    roto = rotowire_proj()                       # primary: id-keyed RotoWire
+    espn_id, espn_name = espn_proj_adp()         # fallback only
     env = team_env()
 
-    # index espn by id already; join Sleeper -> espn via espn_id
     players = []
     for pid, m in sl.items():
         pos = m.get("position")
         if pos not in ("QB", "RB", "WR", "TE", "K", "DEF"):
             continue
-        if not m.get("team"):  # free agents / not on a roster -> skip clutter
-            if pos != "DEF":
-                continue
         name = m.get("full_name") or (m.get("first_name", "") + " " + m.get("last_name", "")).strip()
+        # BLEND two independent projections to denoise per-source outliers (RotoWire had
+        # Josh Jacobs at 87, ESPN at 198 — averaging beats trusting either alone).
+        r = roto.get(pid) or {}
         eid = str(m.get("espn_id")) if m.get("espn_id") else None
-        e = espn_id.get(eid) if eid else None       # try id join first
-        if not e:                                    # fall back to name+pos
-            e = espn_name.get(_norm(name) + "|" + pos, {})
-        proj = e.get("proj")
-        adp = e.get("adp")
+        es = (espn_id.get(eid) if eid else None) or espn_name.get(_norm(name) + "|" + pos, {})
+        srcs = [p for p in (r.get("proj"), es.get("proj")) if p is not None]
+        proj = sum(srcs) / len(srcs) if srcs else None
+        adp = r.get("adp") or es.get("adp")   # RotoWire ADP preferred
+        draftable = adp is not None and adp < 250   # has a real draft position
+        # don't silently drop players: only skip true clutter (no projection AND not draftable
+        # AND not on a team). Keeps Aiyuk (proj gap) / Tyreek Hill (team=None) on the board.
+        if proj is None and not draftable and not m.get("team"):
+            continue
         if proj is None:
-            # DEF/K or unprojected: give a tiny baseline so they're draftable late, no VOR edge
-            if pos in ("K", "DEF"):
-                proj = 110.0 if pos == "K" else 100.0
-            else:
-                continue  # skip skill players ESPN doesn't project (deep bench noise)
+            # imputed baseline so the player still appears/rosters; low so it can't distort VOR
+            proj = {"K": 116.0, "DEF": 100.0}.get(pos, 40.0)
         adj = proj
         adj *= env.get(m.get("team"), 1.0)
         adj *= age_mult(pos, m.get("age"))
         adj *= injury_mult(name, m.get("injury_status"))
-        adj *= overrides.BUMP.get(name, 1.0)
+        adj *= _BUMP_CI.get(name.lower(), 1.0)
         players.append({
             "pid": pid, "name": name, "pos": pos, "team": m.get("team"),
             "age": m.get("age"), "inj": m.get("injury_status"),
