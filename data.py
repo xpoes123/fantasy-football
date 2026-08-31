@@ -81,6 +81,8 @@ def espn_proj_adp(ttl=21600):
 
 def team_env(ttl=21600):
     """team abbrev -> offensive-environment multiplier from Vegas season implied points."""
+    if not config.ODDS_API_KEY:
+        return {}  # no key -> skip Vegas layer, projections still work
     url = ("https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/"
            f"?apiKey={config.ODDS_API_KEY}&regions=us&markets=spreads,totals&oddsFormat=american")
     games = _get(url, ttl=ttl)

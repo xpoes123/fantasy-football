@@ -110,8 +110,15 @@ def recommend(players, drafted, my_roster, my_slot, cur_pick,
     my_all = snake_picks(my_slot)
     my_future = [pk for pk in my_all if pk > cur_pick][:lookahead]
 
+    # Don't recommend K/DEF until the endgame — nobody drafts them early. Allow only when
+    # my remaining picks are about to run out (last pick or two).
+    my_remaining = len([pk for pk in my_all if pk >= cur_pick])
+    have_pos = {p["pos"] for p in my_roster}
+    allow_kdef = my_remaining <= (("K" not in have_pos) + ("DEF" not in have_pos) + 1)
+
     # candidate set: top-k available by VOR, plus best available at each unfilled starter pos
-    avail = [p for p in players if p["pid"] not in drafted]
+    avail = [p for p in players if p["pid"] not in drafted
+             and (allow_kdef or p["pos"] not in ("K", "DEF"))]
     avail_by_vor = sorted(avail, key=lambda x: x["vor"], reverse=True)
     cands = list(avail_by_vor[:k])
     have = {p["pid"] for p in cands}
