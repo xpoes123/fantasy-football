@@ -13,9 +13,21 @@ elite-RB cliff is steep and RBs dry up fast. The Monte Carlo sim makes this conc
 it simulates opponents drafting (via an ADP-pressure model) and shows a comparable QB
 survives to a later round while the elite RB won't — so it grabs scarcity now.
 
+## Objective — variance-aware expected wins (season model)
+Rosters are scored not by a deterministic sum of projections but by **expected H2H
+regular-season wins**: each starter's weekly score is a normal (mean = season/17, sd =
+position CV × mean), the team's weekly total is `N(μ_T, σ_T²)`, and
+`P(win a week) = Φ((μ_T − μ_L)/√(σ_T²+σ_L²))` vs a league-average team. Rosters are
+completed to 15 before scoring so byes/depth/K/DEF count. Consistency vs boom/bust now
+matters, and a **risk knob** (`config.RISK_LAMBDA`, >0 ceiling / <0 floor) tunes it.
+Set `config.USE_WIN_VALUE=False` to revert to the sum objective.
+
 ## Data (all live; verified working)
+- **Sleeper / RotoWire** — `api.sleeper.com/projections` gives RotoWire season
+  projections + ADP, id-keyed (no fuzzy join), incl. real DEF projections. Primary source.
+- **ESPN fantasy API** — 2026 projections + ADP. **Blended** with RotoWire (mean of the
+  two) to denoise per-source outliers, and the fallback when RotoWire lacks a player.
 - **Sleeper API** — league scoring/roster, live picks, player age/injury/team.
-- **ESPN fantasy API** — 2026 season projections + ADP (primary projections).
 - **Odds API** — full-season game spreads/totals → per-team implied points, used to
   nudge projections by offensive environment. Key lives in `.env` (gitignored).
 
