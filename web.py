@@ -70,7 +70,7 @@ def compute_state(slot_override):
     order_rev = {v: k for k, v in order.items()}
     on_team = umap.get(order_rev.get(on_slot)) if order_rev else None
 
-    my_next = my_roster = recs = cliffs = need = None
+    my_next = my_roster = recs = cliffs = need = fallers = pair = None
     if slot:
         my_all = engine.snake_picks(slot)
         my_next = next((pk for pk in my_all if pk >= cur), None)
@@ -84,11 +84,17 @@ def compute_state(slot_override):
             r = engine.recommend(players, drafted, my_roster, slot, my_next,
                                  rollouts=rolls, seed=7)
             surv = engine.survival_probs(players, drafted, cur, my_next, seed=7)
-            recs = [{"pos": x["player"]["pos"], "name": x["player"]["name"],
-                     "team": x["player"]["team"], "inj": x["player"].get("inj"),
-                     "vor": x["player"]["vor"], "adp": x["player"]["adp"],
-                     "exp": round(x["exp_value"], 1),
-                     "survive": surv.get(x["player"]["pid"])} for x in r[:6]]
+            scored = [{"pos": x["player"]["pos"], "name": x["player"]["name"],
+                       "team": x["player"]["team"], "inj": x["player"].get("inj"),
+                       "vor": x["player"]["vor"], "adp": x["player"]["adp"],
+                       "exp": round(x["exp_value"], 1),
+                       "survive": surv.get(x["player"]["pid"])} for x in r]
+            # Only recommend players realistically THERE at your pick — a 22%-survival elite
+            # isn't a "pick", it's a "hope". Split targets from snap-if-they-fall.
+            recs = [x for x in scored if (x["survive"] or 0) >= 0.45][:6]
+            fallers = sorted([x for x in scored if (x["survive"] or 0) < 0.45],
+                             key=lambda z: -z["vor"])[:4]
+            pair = [x["name"] for x in recs[:2]]   # the two you'll likely leave the turn with
             cliffs = _cliffs(players, drafted, need)
 
     avail = sorted((p for p in players if p["pid"] not in drafted),
@@ -116,7 +122,7 @@ def compute_state(slot_override):
                 cliff_pids.add(t[-1]["pid"])   # last player in each tier = the cliff edge
     recent_pos = [p.get("metadata", {}).get("position") for p in picks[-8:]]
     runs = [pos for pos in ("RB", "WR", "QB", "TE") if recent_pos.count(pos) >= 4]
-    for r in (recs or []):
+    for r in (recs or []) + (fallers or []):
         r["stack"] = _stack(r)
 
     state = {
@@ -126,7 +132,8 @@ def compute_state(slot_override):
         "slot": slot, "slot_source": slot_source, "my_next": my_next,
         "picks_away": (my_next - cur) if my_next else None,
         "is_mine": (slot is not None and on_slot == slot),
-        "recommendations": recs, "cliffs": cliffs, "needs": need,
+        "recommendations": recs, "fallers": fallers, "pair": pair,
+        "cliffs": cliffs, "needs": need,
         "runs": runs, "elites_left": elites_left, "bye_warn": _bye_warn(my_roster),
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
                             "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"], "bye": p.get("bye"),

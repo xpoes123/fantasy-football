@@ -59,6 +59,10 @@
   .cliffmark{color:var(--red);font-weight:700;font-size:11px}
   .hc{color:var(--dim);font-size:11px}
   .stack{color:var(--purple);font-size:10px;font-weight:700}
+  .pairplan{background:color-mix(in srgb,var(--green) 12%,transparent);border:1px solid var(--green);
+    border-radius:7px;padding:7px 11px;margin-bottom:9px;font-size:13px;color:var(--fg)}
+  .fallhdr{color:var(--dim);font-size:10px;letter-spacing:1px;text-transform:uppercase;
+    margin:10px 0 5px;border-top:1px solid var(--line);padding-top:8px}
   .byetag{color:var(--dim);font-size:10px;border:1px solid var(--line);border-radius:3px;padding:0 3px}
   .byeclash{color:var(--red);font-size:10px;border:1px solid var(--red);border-radius:3px;padding:0 3px;font-weight:700}
   .runbar{background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange);
@@ -157,16 +161,25 @@ function render(s){
   } else if(elBits){ rb.style.display='block'; rb.style.background='transparent'; rb.style.border='0'; rb.style.color='var(--dim)'; rb.innerHTML=elBits; }
   else { rb.style.display='none'; }
 
-  // recommendations
-  if(s.recommendations && s.recommendations.length){
-    $('recs').innerHTML = s.recommendations.map((r,i)=>`
-      <div class="rec ${i===0?'top':''}">
-        <span class="rk">${i===0?'➤':i+1}</span>${posEl(r.pos)}
+  // recommendations — realistic targets at YOUR pick, not the best on the board
+  const recRow=(r,i,top)=>`
+      <div class="rec ${top?'top':''}">
+        <span class="rk">${top?'➤':i}</span>${posEl(r.pos)}
         <span class="nm">${r.name}${r.stack?' <span class="stack" title="stacks with your roster (QB↔pass-catcher)">🔗 stack</span>':''}${injTag(r.inj)}</span>
         ${survBadge(r.survive)}
         <span class="meta"><b>vor</b> ${Math.round(r.vor)} &nbsp;<b>adp</b> ${r.adp.toFixed(1)}</span>
         <span class="exp" title="expected regular-season wins">${r.exp.toFixed(1)}w</span>
-      </div>`).join('');
+      </div>`;
+  if(s.recommendations && s.recommendations.length){
+    let html='';
+    if(s.pair && s.pair.length>=2)
+      html+=`<div class="pairplan">🎯 plan for your turn (#${s.my_next}${s.my_next?'+'+(s.my_next+1):''}): <b>${s.pair[0]}</b> + <b>${s.pair[1]}</b></div>`;
+    html+=s.recommendations.map((r,i)=>recRow(r,i+1,i===0)).join('');
+    if(s.fallers && s.fallers.length){
+      html+=`<div class="fallhdr">snap if they fall to you</div>`;
+      html+=s.fallers.map(r=>recRow(r,'',false)).join('');
+    }
+    $('recs').innerHTML=html;
   } else {
     $('recs').innerHTML = `<div class="cliff">${s.slot? 'waiting for next pick…':'set your slot above to get recommendations'}</div>`;
   }
