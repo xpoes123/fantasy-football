@@ -48,7 +48,7 @@ def compute_state(slot_override):
     auto = order.get(config.MY_USER_ID)
     slot = auto or slot_override or config.DEFAULT_SLOT
     slot_source = "auto" if auto else ("manual" if slot_override else "default")
-    key = (len(picks), slot)
+    key = (len(picks), slot, slot_source)
     if _cache["key"] == key and _cache["state"] is not None:
         return _cache["state"]
 
@@ -73,14 +73,30 @@ def compute_state(slot_override):
             rolls = 60 if on_slot == slot else 35
             r = engine.recommend(players, drafted, my_roster, slot, my_next,
                                  rollouts=rolls, seed=7)
+            surv = engine.survival_probs(players, drafted, cur, my_next, seed=7)
             recs = [{"pos": x["player"]["pos"], "name": x["player"]["name"],
                      "team": x["player"]["team"], "inj": x["player"].get("inj"),
                      "vor": x["player"]["vor"], "adp": x["player"]["adp"],
-                     "exp": round(x["exp_value"], 1)} for x in r[:6]]
+                     "exp": round(x["exp_value"], 1),
+                     "survive": surv.get(x["player"]["pid"])} for x in r[:6]]
             cliffs = _cliffs(players, drafted, need)
 
     avail = sorted((p for p in players if p["pid"] not in drafted),
                    key=lambda x: x["vor"], reverse=True)
+
+    # survival to my next pick (for the whole board, not just recs) — the turn drafter's
+    # core signal. Plus positional cliff markers and position-run detection.
+    surv_all = engine.survival_probs(players, drafted, cur, my_next, seed=7) if my_next else {}
+    cliff_pids, elites_left = set(), {}
+    for pos in ("QB", "RB", "WR", "TE"):
+        ts = engine.tiers(players, drafted, pos)
+        if ts:
+            elites_left[pos] = len(ts[0])
+            for t in ts:
+                cliff_pids.add(t[-1]["pid"])   # last player in each tier = the cliff edge
+    recent_pos = [p.get("metadata", {}).get("position") for p in picks[-8:]]
+    runs = [pos for pos in ("RB", "WR", "QB", "TE") if recent_pos.count(pos) >= 4]
+
     state = {
         "draft_name": draft["metadata"]["name"], "status": draft["status"],
         "overall": cur, "round": (cur - 1) // teams + 1, "in_round": (cur - 1) % teams + 1,
@@ -89,9 +105,11 @@ def compute_state(slot_override):
         "picks_away": (my_next - cur) if my_next else None,
         "is_mine": (slot is not None and on_slot == slot),
         "recommendations": recs, "cliffs": cliffs, "needs": need,
+        "runs": runs, "elites_left": elites_left,
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
-                            "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"]}
-                           for p in avail[:16]],
+                            "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"],
+                            "survive": surv_all.get(p["pid"]), "cliff": p["pid"] in cliff_pids}
+                           for p in avail[:18]],
         "my_roster": [{"pos": p["pos"], "name": p["name"], "pts": round(p["adj_proj"])}
                       for p in sorted(my_roster or [], key=lambda x: (x["pos"], -x["adj_proj"]))],
         "recent": [{"pick": p["pick_no"], "pos": p.get("metadata", {}).get("position", "?"),

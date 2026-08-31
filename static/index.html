@@ -50,6 +50,16 @@
   .row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid #23263b}
   .row:last-child{border:0}
   .inj{color:var(--yellow);font-size:11px}
+  .surv{font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap}
+  .s-back{color:var(--green);background:color-mix(in srgb,var(--green) 15%,transparent)}
+  .s-likely{color:var(--teal);background:color-mix(in srgb,var(--teal) 12%,transparent)}
+  .s-coin{color:var(--yellow);background:color-mix(in srgb,var(--yellow) 14%,transparent)}
+  .s-slip{color:var(--orange);background:color-mix(in srgb,var(--orange) 15%,transparent)}
+  .s-gone{color:var(--red);background:color-mix(in srgb,var(--red) 16%,transparent)}
+  .cliffmark{color:var(--red);font-weight:700;font-size:11px}
+  .runbar{background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange);
+    border:1px solid var(--orange);border-radius:6px;padding:5px 10px;margin:0 18px 8px;
+    font-size:12.5px;font-weight:600}
   .cliff{font-size:12px;color:var(--dim);padding:3px 0}
   .cliff.steep{color:var(--yellow)}
   .needs{font-size:13px;color:var(--yellow);margin-top:8px}
@@ -74,6 +84,7 @@
   <span><span class="dot" id="live"></span><span id="clock" style="color:var(--dim);font-size:12px"></span></span>
 </header>
 <div id="err"></div>
+<div id="runbar"></div>
 <main>
   <section>
     <h2>Recommended — your pick</h2>
@@ -102,6 +113,18 @@ slotInput.value = localStorage.getItem('slot') || '';
 slotInput.oninput = () => { localStorage.setItem('slot', slotInput.value); tick(); };
 
 function injTag(s){ return s ? ` <span class="inj">${s}</span>` : ''; }
+// survival-to-your-next-pick badge (bucketed per the turn-strategy spec)
+function survBadge(s){
+  if(s==null) return '';
+  const pct=Math.round(s*100);
+  let c,l;
+  if(s>=0.85){c='s-back';l='comes back';}
+  else if(s>=0.60){c='s-likely';l='likely back';}
+  else if(s>=0.35){c='s-coin';l='coin flip';}
+  else if(s>=0.15){c='s-slip';l='slipping';}
+  else {c='s-gone';l='take now';}
+  return `<span class="surv ${c}" title="${pct}% still available at your next pick">${pct}% ${l}</span>`;
+}
 
 function render(s){
   $('err').textContent = '';
@@ -120,12 +143,23 @@ function render(s){
     if(slotInput.value && Number(slotInput.value)!==s.slot){ si.style.color='var(--yellow)'; si.textContent=`slot ${s.slot} (auto — ignoring your box ${slotInput.value})`; }
   } else { si.style.color='var(--yellow)'; si.textContent=`slot ${s.slot} (manual — auto once draft starts)`; }
 
+  // position-run alert + elites-left
+  const rb=$('runbar');
+  const el=s.elites_left||{};
+  const elBits=['RB','WR','TE','QB'].filter(p=>el[p]!=null).map(p=>`${p}:${el[p]} elite left`).join('  ·  ');
+  if(s.runs && s.runs.length){
+    rb.style.display='block';
+    rb.innerHTML=`⚠ ${s.runs.join(' & ')} run in progress — grab the last elite before the cliff${elBits?'  ·  '+elBits:''}`;
+  } else if(elBits){ rb.style.display='block'; rb.style.background='transparent'; rb.style.border='0'; rb.style.color='var(--dim)'; rb.innerHTML=elBits; }
+  else { rb.style.display='none'; }
+
   // recommendations
   if(s.recommendations && s.recommendations.length){
     $('recs').innerHTML = s.recommendations.map((r,i)=>`
       <div class="rec ${i===0?'top':''}">
         <span class="rk">${i===0?'➤':i+1}</span>${posEl(r.pos)}
         <span class="nm">${r.name}${injTag(r.inj)}</span>
+        ${survBadge(r.survive)}
         <span class="meta"><b>vor</b> ${Math.round(r.vor)} &nbsp;<b>adp</b> ${r.adp.toFixed(1)}</span>
         <span class="exp" title="expected regular-season wins">${r.exp.toFixed(1)}w</span>
       </div>`).join('');
@@ -137,7 +171,8 @@ function render(s){
 
   // best available
   $('avail').innerHTML = s.best_available.map(p=>`
-    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}${injTag(p.inj)}</span>
+    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${injTag(p.inj)}</span>
+      ${survBadge(p.survive)}
       <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${p.team||''}</span></div>`).join('');
 
   // roster + needs

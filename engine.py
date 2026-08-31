@@ -151,13 +151,17 @@ def _my_best(avail_by_vor, roster):
     return best or (avail_by_vor[0] if avail_by_vor else None)
 
 
-def _opp_pick(avail_by_adp, pick_no, rng, spread=12.0):
-    """Opponent pick via ADP pressure: players at/under the current pick are 'overdue'
-    (max weight); weight decays as ADP runs ahead of the current pick."""
+def _opp_pick(avail_by_adp, pick_no, rng, eps=0.03):
+    """Opponent pick via ADP pressure. spread grows with ADP (elites barely slide, mid/late
+    players swing 1-2 rounds — matches real ADP dispersion), plus a small chaos floor eps so
+    rare falls still surface. Players at/under the current pick are 'overdue' (max weight)."""
     cands = avail_by_adp[:45]
     if not cands:
         return None
-    weights = [math.exp(-max(0.0, p["adp"] - pick_no) / spread) for p in cands]
+    weights = []
+    for p in cands:
+        spread = min(22.0, max(1.5, 0.5 + 0.15 * p["adp"]))
+        weights.append(math.exp(-max(0.0, p["adp"] - pick_no) / spread) + eps)
     r = rng.random() * sum(weights)
     for p, w in zip(cands, weights):
         r -= w
@@ -189,6 +193,48 @@ def _rollout(candidate, my_roster, universe, drafted, my_future, cur_pick, rng, 
             avail.remove(p)
     avail.sort(key=lambda x: x["vor"], reverse=True)
     return _leaf(roster, avail, baseline)
+
+
+def survival_probs(players, drafted, cur_pick, my_next, rollouts=200, seed=0, top_n=70):
+    """P(player still available at my_next) for the top_n available by VOR — the turn
+    drafter's core question ("will he survive my 22-pick wait?"). Simulates only the
+    opponent picks strictly between cur_pick and my_next via the ADP-pressure model."""
+    avail0 = sorted((p for p in players if p["pid"] not in drafted),
+                    key=lambda x: x["vor"], reverse=True)
+    cohort = {p["pid"] for p in avail0[:top_n]}
+    n_opp = max(0, (my_next or cur_pick) - cur_pick - 1)
+    if n_opp == 0:
+        return {pid: 1.0 for pid in cohort}
+    survive = {pid: 0 for pid in cohort}
+    for i in range(rollouts):
+        rng = random.Random(seed + i)
+        avail = sorted(avail0, key=lambda x: x["adp"])  # adp order; removes keep it sorted
+        taken = set()
+        for k in range(n_opp):
+            p = _opp_pick(avail, cur_pick + 1 + k, rng)
+            if p:
+                avail.remove(p)
+                taken.add(p["pid"])
+        for pid in cohort:
+            if pid not in taken:
+                survive[pid] += 1
+    return {pid: survive[pid] / rollouts for pid in cohort}
+
+
+def tiers(players, drafted, pos, gap=18.0):
+    """Split the available players at a position into tiers, breaking where the adj_proj
+    gap to the next player exceeds `gap`. Returns list of tiers (each a list of players),
+    best first — so tier[0] is the elite bucket and its size = 'how many elites left'."""
+    pool = sorted((p for p in players if p["pos"] == pos and p["pid"] not in drafted),
+                  key=lambda x: -x["adj_proj"])
+    out, cur = [], []
+    for i, p in enumerate(pool):
+        cur.append(p)
+        if i + 1 < len(pool) and p["adj_proj"] - pool[i + 1]["adj_proj"] > gap:
+            out.append(cur); cur = []
+    if cur:
+        out.append(cur)
+    return out
 
 
 def recommend(players, drafted, my_roster, my_slot, cur_pick,
