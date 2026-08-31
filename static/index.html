@@ -58,6 +58,7 @@
   .s-gone{color:var(--red);background:color-mix(in srgb,var(--red) 16%,transparent)}
   .cliffmark{color:var(--red);font-weight:700;font-size:11px}
   .hc{color:var(--dim);font-size:11px}
+  .stack{color:var(--purple);font-size:10px;font-weight:700}
   .byetag{color:var(--dim);font-size:10px;border:1px solid var(--line);border-radius:3px;padding:0 3px}
   .byeclash{color:var(--red);font-size:10px;border:1px solid var(--red);border-radius:3px;padding:0 3px;font-weight:700}
   .runbar{background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange);
@@ -161,7 +162,7 @@ function render(s){
     $('recs').innerHTML = s.recommendations.map((r,i)=>`
       <div class="rec ${i===0?'top':''}">
         <span class="rk">${i===0?'➤':i+1}</span>${posEl(r.pos)}
-        <span class="nm">${r.name}${injTag(r.inj)}</span>
+        <span class="nm">${r.name}${r.stack?' <span class="stack" title="stacks with your roster (QB↔pass-catcher)">🔗 stack</span>':''}${injTag(r.inj)}</span>
         ${survBadge(r.survive)}
         <span class="meta"><b>vor</b> ${Math.round(r.vor)} &nbsp;<b>adp</b> ${r.adp.toFixed(1)}</span>
         <span class="exp" title="expected regular-season wins">${r.exp.toFixed(1)}w</span>
@@ -175,7 +176,7 @@ function render(s){
   // best available
   const myByes=new Set(Object.keys(s.bye_warn||{}).map(Number));
   $('avail').innerHTML = s.best_available.map(p=>`
-    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${injTag(p.inj)}</span>
+    <div class="row">${posEl(p.pos)}<span class="nm">${p.name}${p.stack?' <span class="stack" title="stacks with your roster">🔗</span>':''}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${injTag(p.inj)}</span>
       ${survBadge(p.survive)}
       <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${p.team||''}${p.bye?` <span class="${myByes.has(p.bye)?'byeclash':'byetag'}" title="bye week ${p.bye}${myByes.has(p.bye)?' — you already have players on this bye':''}">B${p.bye}</span>`:''}</span></div>`).join('');
 

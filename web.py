@@ -94,6 +94,16 @@ def compute_state(slot_override):
     avail = sorted((p for p in players if p["pid"] not in drafted),
                    key=lambda x: x["vor"], reverse=True)
 
+    # stack detection: a candidate stacks if it's a QB<->pass-catcher pairing with my roster
+    my_qb_teams = {p["team"] for p in (my_roster or []) if p["pos"] == "QB" and p["team"]}
+    my_pc_teams = {p["team"] for p in (my_roster or []) if p["pos"] in ("WR", "TE") and p["team"]}
+    def _stack(p):
+        if p["pos"] in ("WR", "TE"):
+            return p["team"] in my_qb_teams
+        if p["pos"] == "QB":
+            return bool(p["team"] and p["team"] in my_pc_teams)
+        return False
+
     # survival to my next pick (for the whole board, not just recs) — the turn drafter's
     # core signal. Plus positional cliff markers and position-run detection.
     surv_all = engine.survival_probs(players, drafted, cur, my_next, seed=7) if my_next else {}
@@ -106,6 +116,8 @@ def compute_state(slot_override):
                 cliff_pids.add(t[-1]["pid"])   # last player in each tier = the cliff edge
     recent_pos = [p.get("metadata", {}).get("position") for p in picks[-8:]]
     runs = [pos for pos in ("RB", "WR", "QB", "TE") if recent_pos.count(pos) >= 4]
+    for r in (recs or []):
+        r["stack"] = _stack(r)
 
     state = {
         "draft_name": draft["metadata"]["name"], "status": draft["status"],
@@ -118,7 +130,8 @@ def compute_state(slot_override):
         "runs": runs, "elites_left": elites_left, "bye_warn": _bye_warn(my_roster),
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
                             "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"], "bye": p.get("bye"),
-                            "survive": surv_all.get(p["pid"]), "cliff": p["pid"] in cliff_pids}
+                            "survive": surv_all.get(p["pid"]), "cliff": p["pid"] in cliff_pids,
+                            "stack": _stack(p)}
                            for p in avail[:18]],
         "my_roster": [{"pos": p["pos"], "name": p["name"], "pts": round(p["adj_proj"]),
                        "bye": p.get("bye"), "hc": overrides.HANDCUFFS.get(p["name"])}
