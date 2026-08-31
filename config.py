@@ -16,6 +16,7 @@ MY_USER_ID = "1393861289477959680"  # xpoes / "David RAMP"
 
 NUM_TEAMS = 12
 ROUNDS = 15
+DEFAULT_SLOT = 12  # David drafts at the 12-turn; used pre-draft until draft_order populates
 
 # starting lineup slots (from Sleeper draft settings)
 SLOTS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 2, "K": 1, "DEF": 1}

@@ -46,8 +46,8 @@ def compute_state(slot_override):
     # Real draft_order WINS over the manual box once the draft is live, so a stale/typed
     # slot can't silently mislabel your team all night. Manual only fills the pre-draft gap.
     auto = order.get(config.MY_USER_ID)
-    slot = auto or slot_override
-    slot_source = "auto" if auto else ("manual" if slot_override else None)
+    slot = auto or slot_override or config.DEFAULT_SLOT
+    slot_source = "auto" if auto else ("manual" if slot_override else "default")
     key = (len(picks), slot)
     if _cache["key"] == key and _cache["state"] is not None:
         return _cache["state"]
