@@ -356,11 +356,24 @@ def recommend(players, drafted, my_roster, my_slot, cur_pick,
     allow_qb = ("QB" not in have_pos) and (my_remaining <= config.ROUNDS - 5)
     allow_te = "TE" not in have_pos
 
-    # candidate set: top-k available by VOR, plus best available at each unfilled starter pos
+    # candidate set: top-k available by VOR, plus best available at each unfilled starter pos.
+    # Single-slot positions (K/DEF/QB/TE): once you have one, don't recommend another — this
+    # is what forces exactly one K AND one DEF in the endgame (was drafting 2 K, 0 DEF).
     avail = [p for p in players if p["pid"] not in drafted
              and (allow_kdef or p["pos"] not in ("K", "DEF"))
+             and not (p["pos"] == "K" and "K" in have_pos)
+             and not (p["pos"] == "DEF" and "DEF" in have_pos)
              and (allow_qb or p["pos"] != "QB")
              and (allow_te or p["pos"] != "TE")]
+    # MUST-FILL: if you have only enough picks left to fill your empty mandatory starter slots
+    # (K/DEF), force them now — otherwise upside mode buries the "streamable" DEF and you field
+    # an illegal lineup (mock drafted 0 DEF). This overrides everything else.
+    missing_kdef = [pos for pos in ("K", "DEF") if pos not in have_pos]
+    if missing_kdef and my_remaining <= len(missing_kdef):
+        forced = [p for p in players if p["pid"] not in drafted and p["pos"] in missing_kdef]
+        if forced:
+            avail = forced
+
     avail_by_vor = sorted(avail, key=lambda x: x["vor"], reverse=True)
     cands = list(avail_by_vor[:k])
     have = {p["pid"] for p in cands}
