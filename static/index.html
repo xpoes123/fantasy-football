@@ -157,7 +157,7 @@ function render(s){
   // position-run alert + elites-left
   const rb=$('runbar');
   const el=s.elites_left||{};
-  const elBits=['RB','WR','TE','QB'].filter(p=>el[p]!=null).map(p=>`${p}:${el[p]} elite left`).join('  ·  ');
+  const elBits=['RB','WR','TE','QB'].filter(p=>el[p]!=null).map(p=>`${p}: ${el[p]} startable left`).join('  ·  ');
   if(s.runs && s.runs.length){
     rb.style.display='block';
     rb.innerHTML=`⚠ ${esc(s.runs.join(' & '))} run in progress — grab the last elite before the cliff${elBits?'  ·  '+esc(elBits):''}`;
@@ -175,8 +175,8 @@ function render(s){
       </div>`;
   if(s.recommendations && s.recommendations.length){
     let html='';
-    if(s.pair && s.pair.length>=2)
-      html+=`<div class="pairplan">🎯 plan for your turn (#${s.my_next}${s.my_next?'+'+(s.my_next+1):''}): <b>${esc(s.pair[0])}</b> + <b>${esc(s.pair[1])}</b></div>`;
+    if(s.pair && s.pair.length>=2 && s.my_picks && s.my_picks.length>=2)
+      html+=`<div class="pairplan">🎯 your next two picks (#${s.my_picks[0]} &amp; #${s.my_picks[1]}): target <b>${esc(s.pair[0])}</b> + <b>${esc(s.pair[1])}</b></div>`;
     html+=s.recommendations.map((r,i)=>recRow(r,i+1,i===0)).join('');
     if(s.fallers && s.fallers.length){
       html+=`<div class="fallhdr">snap if they fall to you</div>`;

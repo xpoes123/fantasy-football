@@ -96,10 +96,11 @@ def compute_state(slot_override):
             block[hc.lower()] = {"owner": owner, "stud": _pname(p)}
     on_team = umap.get(order_rev.get(on_slot)) if order_rev else None
 
-    my_next = my_roster = recs = cliffs = need = fallers = pair = None
+    my_next = my_roster = recs = cliffs = need = fallers = pair = my_picks = None
     if slot:
         my_all = engine.snake_picks(slot)
         my_next = next((pk for pk in my_all if pk >= cur), None)
+        my_picks = [pk for pk in my_all if pk >= cur][:2]   # your actual next two picks
         # resolve MY picks even if a drafted player isn't on our board — never lose your own
         # pick from the roster (that would make needs() think the slot is still open).
         my_roster = [live.resolve_pick(p, idx) for p in picks if p.get("draft_slot") == slot]
@@ -144,10 +145,11 @@ def compute_state(slot_override):
     cliff_pids, elites_left = set(), {}
     for pos in ("QB", "RB", "WR", "TE"):
         ts = engine.tiers(players, drafted, pos)
-        if ts:
-            elites_left[pos] = len(ts[0])
-            for t in ts:
-                cliff_pids.add(t[-1]["pid"])   # last player in each tier = the cliff edge
+        for t in ts:
+            cliff_pids.add(t[-1]["pid"])       # last player in each tier = the cliff edge
+        # "startable-caliber left" = available at pos clearly above replacement (VOR >= 30)
+        elites_left[pos] = sum(1 for p in players if p["pos"] == pos
+                               and p["pid"] not in drafted and p["vor"] >= 30)
     recent_pos = [p.get("metadata", {}).get("position") for p in picks[-8:]]
     runs = [pos for pos in ("RB", "WR", "QB", "TE") if recent_pos.count(pos) >= 4]
     for r in (recs or []) + (fallers or []):
@@ -160,7 +162,7 @@ def compute_state(slot_override):
         "slot": slot, "slot_source": slot_source, "my_next": my_next,
         "picks_away": (my_next - cur) if my_next else None,
         "is_mine": (slot is not None and on_slot == slot),
-        "recommendations": recs, "fallers": fallers, "pair": pair,
+        "recommendations": recs, "fallers": fallers, "pair": pair, "my_picks": my_picks,
         "cliffs": cliffs, "needs": need,
         "runs": runs, "elites_left": elites_left, "bye_warn": _bye_warn(my_roster),
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
