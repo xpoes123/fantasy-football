@@ -47,9 +47,11 @@ COACHING = {
     "NYJ":0.99,"PHI":1.00,"PIT":1.00,"SF":1.04,"SEA":0.99,"TB":1.00,"TEN":0.98,"WAS":0.99,
 }
 
-# replacement rank per position given 12-team league demand (starters + flex share).
-# PPR-neutral: the 2 FLEX slots skew WR in PPR, so WR replacement sits DEEPER than RB.
-REPL_RANK = {"QB":12, "RB":30, "WR":40, "TE":13, "K":12, "DEF":12}
+# Waiver-aware replacement ranks (12-team, moderate tilt): value each player over the best
+# player you could STREAM off waivers, not the last drafted starter. RB gets a deep baseline
+# (you can't stream a good RB — everyone hoards them → scarcity); QB/TE shallower (deep waiver
+# pools, stream-able). Elevates RB to its true scarcity value while keeping elite WR premium.
+REPL_RANK = {"QB":13, "RB":38, "WR":44, "TE":14, "K":12, "DEF":12}
 
 
 def _get(url, headers=None, ttl=86400):

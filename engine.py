@@ -93,6 +93,25 @@ def weekly_moments(roster):
     return mu, var
 
 
+_HANDCUFF_NAMES = {v.lower() for v in overrides.HANDCUFFS.values()}
+
+
+def upside_score(p, have_qb=False):
+    """Late-round CEILING score for a bench pick: reward scarce (waiver-aware VOR) + boom
+    variance + a real path (handcuff) + youth; heavily discount streamable K/DEF/2nd-QB.
+    Used once starters are full — 'skip what you can stream, swing for upside'."""
+    base = max(p["vor"], 0) + 20                      # scarcity-aware, kept positive
+    cv = config.POS_CV.get(p["pos"], 0.6)
+    score = base * (1 + config.UPSIDE_CV_LEAN * cv)   # lean into boom weeks
+    if p["name"].lower() in _HANDCUFF_NAMES:
+        score *= config.UPSIDE_HANDCUFF                # backup with a path to a workhorse role
+    if p["pos"] in ("RB", "WR") and (p.get("age") or 99) <= config.UPSIDE_YOUNG_AGE:
+        score *= config.UPSIDE_YOUTH                   # young/ascending
+    if p["pos"] in ("K", "DEF") or (p["pos"] == "QB" and have_qb):
+        score *= config.STREAM_DISCOUNT                # freely streamable off waivers
+    return score
+
+
 def _handcuff_count(roster):
     """How many of my players are the handcuff to another RB I roster (insurance depth)."""
     names = {p["name"] for p in roster}

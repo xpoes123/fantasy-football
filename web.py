@@ -115,16 +115,20 @@ def compute_state(slot_override):
             scored = [{"pos": x["player"]["pos"], "name": x["player"]["name"],
                        "team": x["player"]["team"], "inj": x["player"].get("inj"),
                        "vor": x["player"]["vor"], "adp": x["player"]["adp"],
-                       "exp": round(x["exp_value"], 1),
+                       "age": x["player"].get("age"), "exp": round(x["exp_value"], 1),
                        "survive": surv.get(x["player"]["pid"])} for x in r]
-            # Only recommend players realistically THERE at your pick — a 22%-survival elite
-            # isn't a "pick", it's a "hope". Split targets from snap-if-they-fall.
             targets = [x for x in scored if (x["survive"] or 0) >= 0.45]
-            # Rank by URGENCY-adjusted value: discount players likely to survive to your next
-            # pick (you can grab them later). A safe-forever QB drops below scarcer picks you
-            # must take now. Floor at 0.5 so a much-better safe player isn't buried under junk.
-            targets.sort(key=lambda x: x["exp"] * (0.5 + 0.5 * (1 - (x["survive"] or 0))),
-                         reverse=True)
+            # Once your starters are full (or ~round 9+), switch to UPSIDE MODE: rank bench
+            # picks by ceiling (boom variance + handcuff-path + youth) and discount anything
+            # streamable off waivers. Before that, rank starters by urgency-adjusted value.
+            rnd = (my_next - 1) // teams + 1
+            starter_needs = [n for n in (need or []) if n not in ("K", "DEF")]
+            have_qb = any(p["pos"] == "QB" for p in my_roster)
+            if rnd >= config.UPSIDE_ROUND or not starter_needs:
+                targets.sort(key=lambda x: engine.upside_score(x, have_qb), reverse=True)
+            else:
+                targets.sort(key=lambda x: x["exp"] * (0.5 + 0.5 * (1 - (x["survive"] or 0))),
+                             reverse=True)
             recs = targets[:6]
             fallers = sorted([x for x in scored if (x["survive"] or 0) < 0.45],
                              key=lambda z: -z["vor"])[:4]
