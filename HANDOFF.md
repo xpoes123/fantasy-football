@@ -81,22 +81,32 @@ QB Goff · RB Hampton/Lloyd/Tuten/Gainwell/K.Johnson · WR ARSB/Zay/Odunze/Reed/
 Loveland · DEF NE+JAX · K Trey Smack. Strong: elite WR corps, whole GB backfield cornered
 (Lloyd+K.Johnson insurance), scarce TE at value, smart correlation/streaming calls.
 
-## Improvement roadmap (prioritized — build before leagues 2-4)
-1. **Multi-league support** (must-have) — per-league num_teams/slots/flex + replacement ranks;
-   league picker in UI. Board (adj_proj, PPR) is shared; VOR/engine params differ by league.
-2. **Fresh pre-draft research sweep** (highest value) — one command that re-runs the injury/
-   suspension + scheme/role + wedge subagents against the target league's settings, updates
-   `overrides.py`, so the model reflects current news. THE fix for the news-lag weakness.
-3. **Waiver-aware drafting** (David's new ask, 2026-09) — value should be over the **waiver
-   replacement**, not the last drafted starter. Deep-waiver positions (QB/K/DEF, replaceable
-   WR/RB depth) get discounted (you can stream them); shallow-waiver scarce assets (bell-cow RB,
-   elite TE) get elevated. Refines VOR/replacement + late-round recs. Design TBD.
-4. **Upside mode** for late rounds — ceiling-ranked (handcuff-path, young roles, ADP-value gap);
-   auto-crank `RISK_LAMBDA` for bench picks. See `memory/upside-mode-late-rounds.md`.
-5. **Handcuff workload-transfer** — starter marked out → auto-boost the backup.
-6. **Fresher ADP** + news-driven overrides.
-7. **Saturation awareness** + **DEF-vs-roster correlation flag** + auto **Week-1 matchup** softness
-   for streaming DEFs (did the schedule check manually via web search this draft).
+## Improvement roadmap
+**SHIPPED (post-test-draft iteration, before the work-pod draft):**
+- ✅ **Waiver-aware value** — `REPL_RANK` recalibrated to waiver depth (moderate RB-scarcity
+  tilt: RB38/WR44/TE14/QB13). RB priced over what you can stream, not the last starter.
+- ✅ **Upside mode** (late rounds) — `engine.upside_score`: once starters full or round ≥
+  `UPSIDE_ROUND`, rank bench by ceiling (boom variance + handcuff-path + youth), discount
+  streamable K/DEF/2nd-QB (`STREAM_DISCOUNT`).
+- ✅ **Saturation awareness** (`config.SATURATION`) — discount a position you're already deep
+  at (kills the "5th WR" spam). Plus existing hard-gates on 2nd QB/TE.
+- ✅ **Handcuff workload-transfer** (`data.py`) — starter marked out (GAMES_MISSED ≥ 8) →
+  auto-boost the backup's adj_proj by `starter.proj × (gm/17) × 0.32`. Lloyd auto-lands ~RB20.
+- ✅ **DEF smarts** — `data.DIVISIONS` + `data.def_matchups()`; web attaches per-DEF
+  `{conflict, matchup}`: roster-division conflict (Patriots-over-MIN call) + Week-1 opponent
+  implied-points softness. Shown on DEF rows.
+- ✅ **Player lookup** — `/api/player?q=` + header search box: any player's value + availability.
+- ✅ **ADP_OVERRIDE** knob (`overrides.py`) — robust fresher-ADP (research sweep fills it;
+  FantasyPros scrape was too brittle to depend on).
+
+**STILL TODO:**
+1. **Multi-league support** (must-have for the 8/14-team leagues) — per-league num_teams/slots/
+   flex + replacement ranks; league picker in UI. Board (adj_proj, PPR) is shared; engine params
+   differ. Current approach: repoint `config.py` per league (done manually for work-pod slot 11).
+2. **Fresh pre-draft research sweep as one command** — re-run the injury/suspension + scheme/
+   role + wedge subagents against the target league, auto-update `overrides.py`. Run day-of.
+   THE remaining fix for news-lag. (Mechanisms to consume it — workload-transfer, ADP_OVERRIDE,
+   BUMP/GAMES_MISSED — are all built; just need the automated sweep.)
 
 ## Operating it live (per draft)
 1. Point `config.py` at the league's `LEAGUE_ID`/`DRAFT_ID`/`MY_USER_ID` + set `DEFAULT_SLOT`
