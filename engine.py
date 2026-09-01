@@ -101,7 +101,9 @@ def upside_score(p, have_qb=False, have_counts=None):
     variance + a real path (handcuff) + youth; discount streamable K/DEF/2nd-QB AND positions
     you're already deep at. Used once starters are full — 'skip what you can stream or already
     have plenty of, swing for upside'."""
-    base = max(p["vor"], 0) + 20                      # scarcity-aware, kept positive
+    # keep VOR ordering even below replacement (don't floor scrubs to a common value — that's
+    # what let a −40-VOR RB tie a real dart and let youth/handcuff bonuses hoard the position)
+    base = max(p["vor"], -40) + 45
     cv = config.POS_CV.get(p["pos"], 0.6)
     score = base * (1 + config.UPSIDE_CV_LEAN * cv)   # lean into boom weeks
     if p["name"].lower() in _HANDCUFF_NAMES:
@@ -114,9 +116,9 @@ def upside_score(p, have_qb=False, have_counts=None):
         n = have_counts.get(p["pos"], 0)
         cap = config.SATURATION.get(p["pos"], 5)
         if n >= cap:
-            score *= 0.35
+            score *= 0.12                              # hard brake: stop piling a position past its cap
         elif n >= cap - 1:
-            score *= 0.7
+            score *= 0.5
     return score
 
 
@@ -163,9 +165,44 @@ def win_value(roster, mu_L, var_L):
     return config.REG_WEEKS * pwin
 
 
+# standardized-normal quadrature grid (nodes + normalized φ weights) — integrate my season
+# total over its own distribution once per leaf. 13 nodes is plenty for a smooth integrand.
+_ZS = [-3.0 + 6.0 * i / 12 for i in range(13)]
+_WS = [math.exp(-0.5 * z * z) for z in _ZS]
+_WS = [w / sum(_WS) for w in _WS]
+
+
+def finish_equity(mu_me, var_me, mu_L, var_L, tau, payout, field=None):
+    """Payout-weighted EV of my final standing — the money-maximizing, opponent-aware objective.
+
+    My season total ~ N(REG·μ_me, REG·var_me); integrate over it. At each realized total m, the
+    number of the `field` opponents I finish above is Binomial(field, q), where q = P(I outscore
+    one field team) and a field team's season total ~ N(REG·μ_L, REG·var_L + (REG·τ)²) (within-
+    season noise + between-team strength spread τ). Finishing above k opponents = place (teams−k),
+    paid per `payout`. Ceiling-seeking is ENDOGENOUS: a high-σ roster fattens my finish
+    distribution, which only earns money in the paid places — so variance is valuable exactly when
+    I'm not already the favorite, and harmful when I am. No RISK_LAMBDA needed.
+    """
+    field = (config.NUM_TEAMS - 1) if field is None else field
+    reg = config.REG_WEEKS
+    M, Sd = reg * mu_me, (math.sqrt(reg * var_me) or 1.0)
+    opp_sd = math.sqrt(reg * var_L + (reg * tau) ** 2) or 1.0
+    ev = 0.0
+    for z, w in zip(_ZS, _WS):
+        m = M + z * Sd
+        q = 0.5 * math.erfc(-(m - reg * mu_L) / (math.sqrt(2.0) * opp_sd))
+        q = min(1.0 - 1e-9, max(1e-9, q))
+        for place, pay in payout.items():
+            k = config.NUM_TEAMS - place              # opponents I must finish above for this place
+            if 0 <= k <= field:
+                ev += w * pay * math.comb(field, k) * q ** k * (1 - q) ** (field - k)
+    return ev
+
+
 def league_baseline(players, teams=config.NUM_TEAMS, rounds=config.ROUNDS):
-    """(μ_L, var_L): the average opponent, from snake-drafting the top ADP players into
-    12 rosters and averaging their weekly moments."""
+    """(μ_L, var_L, τ): the field, from snake-drafting the top ADP players into `teams` rosters.
+    μ_L/var_L = average opponent weekly moments; τ = between-team spread of weekly means (how
+    separated the field's strengths are — drives how much finish variance is up for grabs)."""
     order = sorted(players, key=lambda x: x["adp"])[: teams * rounds]
     rosters = [[] for _ in range(teams)]
     i = 0
@@ -175,15 +212,22 @@ def league_baseline(players, teams=config.NUM_TEAMS, rounds=config.ROUNDS):
             if i < len(order):
                 rosters[t].append(order[i]); i += 1
     ms, vs = zip(*(weekly_moments(ro) for ro in rosters))
-    return sum(ms) / len(ms), sum(vs) / len(vs)
+    mu_L = sum(ms) / len(ms)
+    tau = (sum((m - mu_L) ** 2 for m in ms) / len(ms)) ** 0.5
+    return mu_L, sum(vs) / len(vs), tau
 
 
 def _leaf(roster, avail_by_vor, baseline):
-    """Score a roster at a rollout leaf: variance-aware expected wins (completing the
-    roster to 15 first) + handcuff insurance, or legacy sum if USE_WIN_VALUE is off."""
-    if config.USE_WIN_VALUE and baseline:
+    """Score a roster at a rollout leaf (completing it to 15 first). OBJECTIVE selects:
+    'finish' = payout-weighted final-standing EV (opponent + prize aware, default);
+    'wins' = legacy variance-aware expected wins; else deterministic sum-of-projections."""
+    if config.OBJECTIVE in ("finish", "wins") and baseline:
         full = _complete(roster, avail_by_vor)
-        return win_value(full, *baseline) + config.HANDCUFF_BONUS * _handcuff_count(full)
+        mu, var = weekly_moments(full)
+        insurance = config.HANDCUFF_BONUS * _handcuff_count(full)
+        if config.OBJECTIVE == "finish":
+            return finish_equity(mu, var, *baseline, config.PAYOUT) + insurance
+        return win_value(full, baseline[0], baseline[1]) + insurance
     return start_value(roster)
 
 
@@ -382,7 +426,7 @@ def recommend(players, drafted, my_roster, my_slot, cur_pick,
             if p["pos"] == pos and p["pid"] not in have:
                 cands.append(p); have.add(p["pid"]); break
 
-    baseline = league_baseline(players) if config.USE_WIN_VALUE else None
+    baseline = league_baseline(players) if config.OBJECTIVE in ("finish", "wins") else None
     base = _leaf(my_roster, avail_by_vor, baseline)
     results = []
     for c in cands:
@@ -409,6 +453,6 @@ if __name__ == "__main__":
           round(recs[0]["exp_value"], 1))
     for r in recs[:6]:
         p = r["player"]
-        print(f"  {p['pos']:3} {p['name'][:22]:22} vor {p['vor']:6}  E[wins] {r['exp_value']:5.1f}")
+        print(f"  {p['pos']:3} {p['name'][:22]:22} vor {p['vor']:6}  E[$] {r['exp_value']:5.2f}")
     assert top["pos"] in ("RB", "WR"), f"expected elite RB/WR at 1.01, got {top['pos']}"
     print("OK: scarcity-aware (RB/WR over QB at 1.01)")

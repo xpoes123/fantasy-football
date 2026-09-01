@@ -1,6 +1,6 @@
 """Build the unified player table: Sleeper meta + ESPN proj/ADP + Vegas/age/injury
 adjustments + VOR. Cached to data/cache/ so we don't refetch every launch."""
-import json, os, time, urllib.request, urllib.parse
+import json, math, os, time, urllib.request, urllib.parse
 import config, overrides
 
 CACHE = config.CACHE_DIR
@@ -280,20 +280,36 @@ def build_players():
         if proj is None:
             # imputed baseline so the player still appears/rosters; low so it can't distort VOR
             proj = {"K": 116.0, "DEF": 100.0}.get(pos, 40.0)
-        adj = proj
-        adj *= env.get(m.get("team"), 1.0)
-        adj *= age_mult(pos, m.get("age"))
-        adj *= injury_mult(name, m.get("injury_status"))
-        adj *= SOS_TEAM.get(m.get("team"), 1.0)
-        adj *= COACHING.get(m.get("team"), 1.0)
-        adj *= _BUMP_CI.get(name.lower(), 1.0)
-        adj *= _WEDGE_CI.get(name.lower(), 1.0)
+        # Soft situational priors (all proxy "good spot") -> combine in log-space with damping +
+        # a hard cap so they can't compound into runaway over-love. Injury is a separate real haircut.
+        signals = [env.get(m.get("team"), 1.0), age_mult(pos, m.get("age")),
+                   SOS_TEAM.get(m.get("team"), 1.0), COACHING.get(m.get("team"), 1.0),
+                   _BUMP_CI.get(name.lower(), 1.0), _WEDGE_CI.get(name.lower(), 1.0)]
+        logsum = sum(math.log(s) for s in signals if s > 0)
+        factor = min(config.SIGNAL_CAP_HI, max(config.SIGNAL_CAP_LO,
+                                               math.exp(config.SIGNAL_DAMP * logsum)))
+        base_adj = proj * factor * injury_mult(name, m.get("injury_status"))
         players.append({
             "pid": pid, "name": name, "pos": pos, "team": m.get("team"),
             "age": m.get("age"), "inj": m.get("injury_status"),
-            "proj": round(proj, 1), "adj_proj": round(adj, 1),
+            "proj": round(proj, 1), "base_adj": base_adj, "adj_proj": round(base_adj, 1),
             "adp": adp if adp else 999.0, "bye": BYES.get(m.get("team")),
         })
+
+    # ① Market blend: regress each model value toward what the market (ADP) implies for that draft
+    # slot. Build an ADP->value curve (value of the k-th best draftable player = what the market
+    # pays for pick k), then pull each player toward the value at their ADP. Modest edges (within
+    # BLEND_FREE of market) are kept in full; extreme divergence (a bump-inflated backup, a rookie
+    # the model has 3 rounds early) gets yanked home — kills over-love, keeps genuine edges.
+    curve = sorted((p["base_adj"] for p in players if p["adp"] < 250), reverse=True)
+    n = len(curve)
+    for p in players:
+        if p["adp"] >= 250 or n == 0:                 # no market signal -> trust the model
+            continue
+        mkt = curve[min(int(round(p["adp"])), n) - 1]
+        m0, d = p["base_adj"], abs(p["base_adj"] - mkt) / mkt if mkt > 0 else 0.0
+        w = math.exp(-config.BLEND_K * max(0.0, d - config.BLEND_FREE))
+        p["adj_proj"] = round(w * m0 + (1 - w) * mkt, 1)
 
     # Workload transfer: when a starter is marked OUT (GAMES_MISSED high), move their vacated
     # production to their handcuff — the model doesn't do this on its own (had to hand-bump
