@@ -124,6 +124,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const DRAFT = new URLSearchParams(location.search).get('draft') || '';  // ?draft=<id> for mocks/other drafts
 // escape API-sourced strings (player names, opponent team names) before innerHTML — leaguemates control team names
 const esc = s => s==null?'':String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const posEl = p => `<span class="pos" style="color:var(--${p});background:color-mix(in srgb,var(--${p}) 15%,transparent)">${p}</span>`;
@@ -139,7 +140,7 @@ searchInput.oninput=()=>{
   if(q.length<2){ $('searchresults').innerHTML=''; return; }
   searchTimer=setTimeout(async()=>{
     try{
-      const r=await fetch(`/api/player?q=${encodeURIComponent(q)}`);
+      const r=await fetch(`/api/player?q=${encodeURIComponent(q)}&draft=${DRAFT}`);
       const d=await r.json();
       $('searchresults').innerHTML=(d.results||[]).map(p=>`
         <div class="sr">${posEl(p.pos)}<span class="nm">${esc(p.name)}${injTag(p.inj)}</span>
@@ -260,7 +261,7 @@ async function tick(){
   $('clock').textContent='⟳ updating…';
   try{
     const slot = slotInput.value || 0;
-    const r = await fetch(`/api/state?slot=${slot}`);
+    const r = await fetch(`/api/state?slot=${slot}&draft=${DRAFT}`);
     const s = await r.json();
     if(s.error){ $('err').textContent='error: '+s.error; $('live').style.background='var(--red)'; $('clock').textContent='error'; return; }
     render(s);

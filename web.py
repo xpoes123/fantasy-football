@@ -46,11 +46,16 @@ def _api(path):
         return json.load(r)
 
 
-def compute_state(slot_override):
+def compute_state(slot_override, draft_id=None):
     b = board()
     players, idx, umap = b["players"], b["idx"], b["umap"]
-    draft = _api(f"draft/{config.DRAFT_ID}")
-    picks = _api(f"draft/{config.DRAFT_ID}/picks")
+    did = draft_id or config.DRAFT_ID
+    draft = _api(f"draft/{did}")
+    picks = _api(f"draft/{did}/picks")
+    # adapt to THIS draft's size (mock lobbies, other leagues) — sets the snake/survival math
+    st = draft.get("settings") or {}
+    config.NUM_TEAMS = st.get("teams") or config.NUM_TEAMS
+    config.ROUNDS = st.get("rounds") or config.ROUNDS
 
     order = draft.get("draft_order") or {}
     # Real draft_order WINS over the manual box once the draft is live, so a stale/typed
@@ -58,7 +63,7 @@ def compute_state(slot_override):
     auto = order.get(config.MY_USER_ID)
     slot = auto or slot_override or config.DEFAULT_SLOT
     slot_source = "auto" if auto else ("manual" if slot_override else "default")
-    key = (len(picks), slot, slot_source)
+    key = (did, len(picks), slot, slot_source)
     if _cache["key"] == key and _cache["state"] is not None:
         return _cache["state"]
 
@@ -225,22 +230,22 @@ def _cliffs(players, drafted, need_positions):
 
 
 @app.get("/api/state")
-def state(slot: int = 0):
+def state(slot: int = 0, draft: str = ""):
     try:
-        return compute_state(slot or None)
+        return compute_state(slot or None, draft or None)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/api/player")
-def player_lookup(q: str = ""):
+def player_lookup(q: str = "", draft: str = ""):
     """Search any player by name — value + whether they're still available. Kills the
     'is X still on the board?' guesswork (and the stale-data mistakes)."""
     if len(q.strip()) < 2:
         return {"results": []}
     b = board()
     try:
-        drafted = {p["player_id"] for p in _api(f"draft/{config.DRAFT_ID}/picks")}
+        drafted = {p["player_id"] for p in _api(f"draft/{draft or config.DRAFT_ID}/picks")}
     except Exception:
         drafted = set()
     ql = q.lower()
