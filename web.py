@@ -259,7 +259,9 @@ def player_lookup(q: str = "", draft: str = ""):
 
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(HERE, "static", "index.html"))
+    # no-store so the browser always loads the latest JS after a deploy (no more stale tabs)
+    return FileResponse(os.path.join(HERE, "static", "index.html"),
+                        headers={"Cache-Control": "no-store, must-revalidate"})
 
 
 app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
