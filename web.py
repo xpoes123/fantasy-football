@@ -4,7 +4,7 @@ Serves static/index.html and a /api/state endpoint that returns the current draf
 state + Monte Carlo recommendations as JSON. Recommendations are recomputed only when
 a new pick lands (cached by pick count + slot), so polling every few seconds is cheap.
 """
-import json, threading, urllib.request
+import json, threading, time, urllib.request
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +38,7 @@ def board():
                 _board["players"] = players
                 _board["idx"] = {p["pid"]: p for p in players}
                 _board["umap"] = live.users_map()
+                _board["built_at"] = time.time()   # projections/odds freshness = build time (rebuilt on restart)
     return _board
 
 
@@ -232,7 +233,15 @@ def _cliffs(players, drafted, need_positions):
 @app.get("/api/state")
 def state(slot: int = 0, draft: str = ""):
     try:
-        return compute_state(slot or None, draft or None)
+        t0 = time.time()
+        s = compute_state(slot or None, draft or None)
+        # freshness signals for the UI: how long this response took to compute, and how old the
+        # underlying board data (projections/vegas, fetched at build time) is. Injected post-cache
+        # so they're always current even when the recommendation itself is a cache hit.
+        s = dict(s)
+        s["computed_ms"] = round((time.time() - t0) * 1000)
+        s["board_age_s"] = round(time.time() - _board.get("built_at", time.time()))
+        return s
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
