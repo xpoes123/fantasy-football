@@ -83,6 +83,26 @@ def sleeper_players(ttl=86400):
     return _get("https://api.sleeper.app/v1/players/nfl", ttl=ttl)
 
 
+def preseason_usage(ttl=43200):
+    """player_id -> (snap_share, touches) from this year's preseason games. Reveals who won a
+    role — snap%, carries+targets. INFO ONLY: established starters rest in preseason (Bijan/CMC
+    play 0 snaps), so raw snap share is scrub-dominated and must never be a value multiplier;
+    it's surfaced as a flag on contested/late players for the drafter to judge."""
+    try:
+        raw = _get(f"https://api.sleeper.app/v1/stats/nfl/pre/{config.SEASON}", ttl=ttl)
+    except Exception:
+        return {}
+    out = {}
+    for pid, s in (raw or {}).items():
+        if not isinstance(s, dict):
+            continue
+        osnp, tos = s.get("off_snp"), s.get("tm_off_snp")
+        if not osnp or not tos:
+            continue
+        out[pid] = (round(osnp / tos, 3), int((s.get("rush_att", 0) or 0) + (s.get("rec_tgt", 0) or 0)))
+    return out
+
+
 ESPN_POS = {1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DEF"}
 
 
@@ -257,6 +277,7 @@ def build_players():
     roto = rotowire_proj()                       # primary: id-keyed RotoWire
     espn_id, espn_name = espn_proj_adp()         # fallback only
     env = team_env()
+    pre = preseason_usage()                      # {pid: (snap_share, touches)} — info flag only
 
     players = []
     for pid, m in sl.items():
@@ -289,11 +310,13 @@ def build_players():
         factor = min(config.SIGNAL_CAP_HI, max(config.SIGNAL_CAP_LO,
                                                math.exp(config.SIGNAL_DAMP * logsum)))
         base_adj = proj * factor * injury_mult(name, m.get("injury_status"))
+        ps = pre.get(pid)
         players.append({
             "pid": pid, "name": name, "pos": pos, "team": m.get("team"),
             "age": m.get("age"), "inj": m.get("injury_status"),
             "proj": round(proj, 1), "base_adj": base_adj, "adj_proj": round(base_adj, 1),
             "adp": adp if adp else 999.0, "bye": BYES.get(m.get("team")),
+            "presnap": ps[0] if ps else None, "pretouch": ps[1] if ps else None,
         })
 
     # ① Market blend: regress each model value toward what the market (ADP) implies for that draft

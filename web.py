@@ -22,6 +22,18 @@ def _bye_warn(roster):
             byes[b] = byes.get(b, 0) + 1
     return {str(wk): n for wk, n in sorted(byes.items()) if n >= 2}
 
+def _pre(p):
+    """Preseason-usage flag, but only where it's informative: contested/late players (ADP > 70,
+    so we skip rested locked-in starters) who took a real snap share. Info only — the drafter
+    judges. Returns {snap:%, touch:n} or None."""
+    sh, adp = p.get("presnap"), p.get("adp") or 999
+    # band: drafted (adp < ~220) but past the locked-in-early starters (adp > 70). Outside this,
+    # the signal is noise — rested stars (low adp) or UDFA scrubs who play all game (adp 999).
+    if sh is None or not (65 < adp < 240) or sh < 0.25 or p["pos"] not in ("RB", "WR", "TE"):
+        return None
+    return {"snap": round(sh * 100), "touch": p.get("pretouch") or 0}
+
+
 app = FastAPI()
 _lock = threading.Lock()
 _board = {"players": None, "idx": None, "umap": None}
@@ -122,6 +134,7 @@ def compute_state(slot_override, draft_id=None):
                        "team": x["player"]["team"], "inj": x["player"].get("inj"),
                        "vor": x["player"]["vor"], "adp": x["player"]["adp"],
                        "age": x["player"].get("age"), "exp": round(x["exp_value"], 1),
+                       "pre": _pre(x["player"]),
                        "survive": surv.get(x["player"]["pid"])} for x in r]
             targets = [x for x in scored if (x["survive"] or 0) >= 0.45]
             # Once your starters are full (or ~round 9+), switch to UPSIDE MODE: rank bench
@@ -200,6 +213,7 @@ def compute_state(slot_override, draft_id=None):
         "runs": runs, "elites_left": elites_left, "bye_warn": _bye_warn(my_roster),
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
                             "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"], "bye": p.get("bye"),
+                            "pre": _pre(p),
                             "survive": surv_all.get(p["pid"]), "cliff": p["pid"] in cliff_pids,
                             "stack": _stack(p), "block": block.get(p["name"].lower()),
                             "def": _def_info(p["team"]) if p["pos"] == "DEF" else None}

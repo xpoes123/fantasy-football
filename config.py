@@ -15,6 +15,7 @@ LEAGUE_ID = "1395587120424316928"
 DRAFT_ID = "1395587120973746176"
 MY_USER_ID = "1393861289477959680"  # xpoes / "David RAMP"
 
+SEASON = "2026"     # NFL season being drafted (projections, byes, preseason usage all key off this)
 NUM_TEAMS = 12
 ROUNDS = 15
 DEFAULT_SLOT = 11  # David drafts slot 11 in the work-pod league; auto-detects once draft_order sets
