@@ -56,7 +56,7 @@
   .row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid #23263b}
   .row:last-child{border:0}
   .inj{color:var(--yellow);font-size:11px}
-  .pre{color:var(--teal);font-size:10px;font-weight:700}
+  .comm{color:var(--orange);font-size:10px;font-weight:700}
   .surv{font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap}
   .s-back{color:var(--green);background:color-mix(in srgb,var(--green) 15%,transparent)}
   .s-likely{color:var(--teal);background:color-mix(in srgb,var(--teal) 12%,transparent)}
@@ -160,8 +160,9 @@ searchInput.oninput=()=>{
 };
 
 function injTag(s){ return s ? ` <span class="inj">${esc(s)}</span>` : ''; }
-// preseason-usage flag (INFO ONLY): who earned a role in August — snap share + touches
-function preTag(pre){ return pre ? ` <span class="pre" title="preseason: ${pre.snap}% of team snaps${pre.touch?`, ${pre.touch} carries+targets`:''} — role/scheme signal, info only (starters rest, so this only speaks to contested/late roles)">🔺 ${pre.snap}% ps${pre.touch?` ${pre.touch}t`:''}</span>` : ''; }
+// committee flag (INFO ONLY): the starter shares a backfield with another DRAFTED back — the
+// market is spending a pick on the RB2, so expect a timeshare. You judge whether it dings them.
+function commTag(c){ return c ? ` <span class="comm" title="backfield timeshare — ${esc(c.name)} is also being drafted (ADP ${c.adp}${c.depth?`, depth #${c.depth}`:''}${c.touch?`, ${c.touch} preseason touches`:''}). Shared backfield caps the ceiling.">⚠ committee: ${esc(c.name.split(' ').slice(-1)[0])} (${Math.round(c.adp)})</span>` : ''; }
 // DEF smarts: Week-1 matchup softness + roster conflict
 function defTag(d){
   if(!d) return '';
@@ -218,7 +219,7 @@ function render(s){
   const recRow=(r,i,top)=>`
       <div class="rec ${top?'top':''}">
         <span class="rk">${top?'➤':i}</span>${posEl(r.pos)}
-        <span class="nm">${esc(r.name)}${r.stack?' <span class="stack" title="stacks with your roster (QB↔pass-catcher)">🔗 stack</span>':''}${preTag(r.pre)}${injTag(r.inj)}</span>
+        <span class="nm">${esc(r.name)}${r.stack?' <span class="stack" title="stacks with your roster (QB↔pass-catcher)">🔗 stack</span>':''}${commTag(r.committee)}${injTag(r.inj)}</span>
         ${survBadge(r.survive)}
         <span class="meta"><b>vor</b> ${Math.round(r.vor)} &nbsp;<b>adp</b> ${r.adp.toFixed(1)}</span>
         <span class="exp" title="expected regular-season wins">${r.exp.toFixed(1)}w</span>
@@ -242,7 +243,7 @@ function render(s){
   // best available
   const myByes=new Set(Object.keys(s.bye_warn||{}).map(Number));
   $('avail').innerHTML = s.best_available.map(p=>`
-    <div class="row">${posEl(p.pos)}<span class="nm">${esc(p.name)}${p.stack?' <span class="stack" title="stacks with your roster">🔗</span>':''}${p.block?` <span class="block" title="handcuff to ${esc(p.block.stud)} — owned by ${esc(p.block.owner)} (leverage play)">🔒 ${esc(p.block.stud)}'s backup</span>`:''}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${preTag(p.pre)}${injTag(p.inj)}</span>
+    <div class="row">${posEl(p.pos)}<span class="nm">${esc(p.name)}${p.stack?' <span class="stack" title="stacks with your roster">🔗</span>':''}${p.block?` <span class="block" title="handcuff to ${esc(p.block.stud)} — owned by ${esc(p.block.owner)} (leverage play)">🔒 ${esc(p.block.stud)}'s backup</span>`:''}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${commTag(p.committee)}${injTag(p.inj)}</span>
       ${survBadge(p.survive)}
       <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${esc(p.team||'')}${p.bye?` <span class="${myByes.has(p.bye)?'byeclash':'byetag'}" title="bye week ${p.bye}${myByes.has(p.bye)?' — you already have players on this bye':''}">B${p.bye}</span>`:''}${defTag(p.def)}</span></div>`).join('');
 

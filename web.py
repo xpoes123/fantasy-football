@@ -22,16 +22,30 @@ def _bye_warn(roster):
             byes[b] = byes.get(b, 0) + 1
     return {str(wk): n for wk, n in sorted(byes.items()) if n >= 2}
 
-def _pre(p):
-    """Preseason-usage flag, but only where it's informative: contested/late players (ADP > 70,
-    so we skip rested locked-in starters) who took a real snap share. Info only — the drafter
-    judges. Returns {snap:%, touch:n} or None."""
-    sh, adp = p.get("presnap"), p.get("adp") or 999
-    # band: drafted (adp < ~220) but past the locked-in-early starters (adp > 70). Outside this,
-    # the signal is noise — rested stars (low adp) or UDFA scrubs who play all game (adp 999).
-    if sh is None or not (65 < adp < 240) or sh < 0.25 or p["pos"] not in ("RB", "WR", "TE"):
-        return None
-    return {"snap": round(sh * 100), "touch": p.get("pretouch") or 0}
+def committee_map(players):
+    """{starter_pid: backup_info} — flag draftable RBs who share a backfield. The fantasy-relevant
+    'usage impact on the starter' isn't preseason snaps (starters rest → noise); it's whether the
+    MARKET is drafting a second back (ADP is the crowd's read on first-team reps beat reporters
+    saw). So: a startable RB (ADP<130) with another drafted RB (ADP<150) on the same team = a
+    real timeshare risk. Preseason touches ride along as a confirm. Info only."""
+    by = {}
+    for p in players:
+        if p["pos"] == "RB" and p.get("team") and (p.get("adp") or 999) < 200:
+            by.setdefault(p["team"], []).append(p)
+    out = {}
+    for rbs in by.values():
+        rbs.sort(key=lambda r: r["adp"])
+        for rb in rbs:
+            if rb["adp"] >= 130:
+                continue
+            # mate must be drafted (adp<150) AND within ~7 rounds (a real timeshare, not a
+            # distant handcuff going 100+ picks later)
+            mate = next((o for o in rbs if o is not rb and o["adp"] < 150
+                         and o["adp"] - rb["adp"] < 90), None)
+            if mate:
+                out[rb["pid"]] = {"name": mate["name"], "adp": round(mate["adp"], 1),
+                                  "depth": mate.get("depth"), "touch": mate.get("pretouch") or 0}
+    return out
 
 
 app = FastAPI()
@@ -50,6 +64,7 @@ def board():
                 _board["players"] = players
                 _board["idx"] = {p["pid"]: p for p in players}
                 _board["umap"] = live.users_map()
+                _board["committee"] = committee_map(players)   # backfield-timeshare flags on starters
                 _board["built_at"] = time.time()   # projections/odds freshness = build time (rebuilt on restart)
     return _board
 
@@ -62,6 +77,7 @@ def _api(path):
 def compute_state(slot_override, draft_id=None):
     b = board()
     players, idx, umap = b["players"], b["idx"], b["umap"]
+    cmap = b.get("committee") or {}
     did = draft_id or config.DRAFT_ID
     draft = _api(f"draft/{did}")
     picks = _api(f"draft/{did}/picks")
@@ -134,7 +150,7 @@ def compute_state(slot_override, draft_id=None):
                        "team": x["player"]["team"], "inj": x["player"].get("inj"),
                        "vor": x["player"]["vor"], "adp": x["player"]["adp"],
                        "age": x["player"].get("age"), "exp": round(x["exp_value"], 1),
-                       "pre": _pre(x["player"]),
+                       "committee": cmap.get(x["player"]["pid"]),
                        "survive": surv.get(x["player"]["pid"])} for x in r]
             targets = [x for x in scored if (x["survive"] or 0) >= 0.45]
             # Once your starters are full (or ~round 9+), switch to UPSIDE MODE: rank bench
@@ -213,7 +229,7 @@ def compute_state(slot_override, draft_id=None):
         "runs": runs, "elites_left": elites_left, "bye_warn": _bye_warn(my_roster),
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
                             "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"], "bye": p.get("bye"),
-                            "pre": _pre(p),
+                            "committee": cmap.get(p["pid"]),
                             "survive": surv_all.get(p["pid"]), "cliff": p["pid"] in cliff_pids,
                             "stack": _stack(p), "block": block.get(p["name"].lower()),
                             "def": _def_info(p["team"]) if p["pos"] == "DEF" else None}

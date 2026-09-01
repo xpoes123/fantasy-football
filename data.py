@@ -317,6 +317,7 @@ def build_players():
             "proj": round(proj, 1), "base_adj": base_adj, "adj_proj": round(base_adj, 1),
             "adp": adp if adp else 999.0, "bye": BYES.get(m.get("team")),
             "presnap": ps[0] if ps else None, "pretouch": ps[1] if ps else None,
+            "depth": m.get("depth_chart_order"),
         })
 
     # ① Market blend: regress each model value toward what the market (ADP) implies for that draft
