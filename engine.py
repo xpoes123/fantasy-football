@@ -96,10 +96,11 @@ def weekly_moments(roster):
 _HANDCUFF_NAMES = {v.lower() for v in overrides.HANDCUFFS.values()}
 
 
-def upside_score(p, have_qb=False):
+def upside_score(p, have_qb=False, have_counts=None):
     """Late-round CEILING score for a bench pick: reward scarce (waiver-aware VOR) + boom
-    variance + a real path (handcuff) + youth; heavily discount streamable K/DEF/2nd-QB.
-    Used once starters are full — 'skip what you can stream, swing for upside'."""
+    variance + a real path (handcuff) + youth; discount streamable K/DEF/2nd-QB AND positions
+    you're already deep at. Used once starters are full — 'skip what you can stream or already
+    have plenty of, swing for upside'."""
     base = max(p["vor"], 0) + 20                      # scarcity-aware, kept positive
     cv = config.POS_CV.get(p["pos"], 0.6)
     score = base * (1 + config.UPSIDE_CV_LEAN * cv)   # lean into boom weeks
@@ -109,6 +110,13 @@ def upside_score(p, have_qb=False):
         score *= config.UPSIDE_YOUTH                   # young/ascending
     if p["pos"] in ("K", "DEF") or (p["pos"] == "QB" and have_qb):
         score *= config.STREAM_DISCOUNT                # freely streamable off waivers
+    if have_counts:                                   # roster-saturation: deep here already?
+        n = have_counts.get(p["pos"], 0)
+        cap = config.SATURATION.get(p["pos"], 5)
+        if n >= cap:
+            score *= 0.35
+        elif n >= cap - 1:
+            score *= 0.7
     return score
 
 

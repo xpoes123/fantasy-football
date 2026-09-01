@@ -124,8 +124,12 @@ def compute_state(slot_override):
             rnd = (my_next - 1) // teams + 1
             starter_needs = [n for n in (need or []) if n not in ("K", "DEF")]
             have_qb = any(p["pos"] == "QB" for p in my_roster)
+            have_counts = {}
+            for p in my_roster:
+                have_counts[p["pos"]] = have_counts.get(p["pos"], 0) + 1
             if rnd >= config.UPSIDE_ROUND or not starter_needs:
-                targets.sort(key=lambda x: engine.upside_score(x, have_qb), reverse=True)
+                targets.sort(key=lambda x: engine.upside_score(x, have_qb, have_counts),
+                             reverse=True)
             else:
                 targets.sort(key=lambda x: x["exp"] * (0.5 + 0.5 * (1 - (x["survive"] or 0))),
                              reverse=True)

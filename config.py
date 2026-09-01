@@ -46,6 +46,9 @@ UPSIDE_HANDCUFF = 1.40  # multiplier for a handcuff (real path to a workhorse ro
 UPSIDE_YOUTH = 1.20     # multiplier for young ascending RB/WR (age <= UPSIDE_YOUNG_AGE)
 UPSIDE_YOUNG_AGE = 23
 STREAM_DISCOUNT = 0.30  # K/DEF and a 2nd QB are freely streamable -> heavy discount
+# beyond this many at a position, extras are low-value depth -> discount in upside mode
+# (this is what stops it recommending a 5th WR when you're already deep there)
+SATURATION = {"RB": 5, "WR": 4, "TE": 1, "QB": 1}
 
 # --- opponent modeling: how simulated opponents pick (beyond raw ADP) ---
 OPP_NEED_BETA = 0.55    # boost positions an opponent still needs (roster-need pressure)
