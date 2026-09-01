@@ -253,6 +253,20 @@ def build_players():
             "adp": adp if adp else 999.0, "bye": BYES.get(m.get("team")),
         })
 
+    # Workload transfer: when a starter is marked OUT (GAMES_MISSED high), move their vacated
+    # production to their handcuff — the model doesn't do this on its own (had to hand-bump
+    # Lloyd/Kaleb Johnson live). Applied before VOR so the backup's value reflects the role.
+    idx = {p["name"].lower(): p for p in players}
+    for starter, backup in overrides.HANDCUFFS.items():
+        gm = _GM_CI.get(starter.lower(), 0)
+        if gm < 8:                                    # only if starter misses ~half+ the season
+            continue
+        sp, bp = idx.get(starter.lower()), idx.get(backup.lower())
+        if not sp or not bp:
+            continue
+        transfer = sp["proj"] * (gm / 17.0) * 0.32    # backup inherits volume at lower efficiency
+        bp["adj_proj"] = round(bp["adj_proj"] + transfer, 1)
+
     # VOR = adj_proj - replacement-level adj_proj at position
     by_pos = {}
     for p in players:

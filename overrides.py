@@ -105,7 +105,7 @@ WEDGES = {
 
 # Projection multipliers from OC-scheme + role/value research (averaged across two passes).
 BUMP = {
-    "MarShawn Lloyd": 1.50,   # Jacobs OUT → GB lead back; model doesn't auto-transfer workload
+    "MarShawn Lloyd": 1.15,   # scheme only; Jacobs-out workload now auto-transferred in data.py
     "Ashton Jeanty": 1.13,
     "DeVonta Smith": 1.12,
     "Omarion Hampton": 1.12,
