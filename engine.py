@@ -323,14 +323,17 @@ def recommend(players, drafted, my_roster, my_slot, cur_pick,
     my_remaining = len([pk for pk in my_all if pk >= cur_pick])
     have_pos = {p["pos"] for p in my_roster}
     allow_kdef = my_remaining <= (("K" not in have_pos) + ("DEF" not in have_pos) + 1)
-    # QB is the deepest, most streamable position — don't recommend one early. Open it up
-    # from ~mid-draft (or once you already have one, a 2nd is just low-value depth).
-    allow_qb = ("QB" in have_pos) or (my_remaining <= config.ROUNDS - 5)
+    # Don't recommend single-slot positions you're already set at — a 2nd QB/TE is just
+    # low-value depth (they don't stack, and you'd rather flex RB/WR). QB also stays gated
+    # early (deepest/streamable): only recommend one once it's mid-draft and you lack one.
+    allow_qb = ("QB" not in have_pos) and (my_remaining <= config.ROUNDS - 5)
+    allow_te = "TE" not in have_pos
 
     # candidate set: top-k available by VOR, plus best available at each unfilled starter pos
     avail = [p for p in players if p["pid"] not in drafted
              and (allow_kdef or p["pos"] not in ("K", "DEF"))
-             and (allow_qb or p["pos"] != "QB")]
+             and (allow_qb or p["pos"] != "QB")
+             and (allow_te or p["pos"] != "TE")]
     avail_by_vor = sorted(avail, key=lambda x: x["vor"], reverse=True)
     cands = list(avail_by_vor[:k])
     have = {p["pid"] for p in cands}
