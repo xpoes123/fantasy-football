@@ -104,6 +104,13 @@ WEDGES = {
 }
 
 # Projection multipliers from OC-scheme + role/value research (averaged across two passes).
+ADP_OVERRIDE = {
+    # player name -> current market ADP, for when news has moved a player past the stale feed
+    # ADP (e.g. Lloyd surged to ~90 on the Jacobs news but the projection feed still said 158).
+    # Populated by the day-of research sweep; robust (no fragile live scrape).
+    # "MarShawn Lloyd": 90,
+}
+
 BUMP = {
     "MarShawn Lloyd": 1.15,   # scheme only; Jacobs-out workload now auto-transferred in data.py
     "Ashton Jeanty": 1.13,

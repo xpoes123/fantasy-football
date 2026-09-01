@@ -235,6 +235,7 @@ def age_mult(pos, age):
 _GM_CI = {k.lower(): v for k, v in overrides.GAMES_MISSED.items()}
 _BUMP_CI = {k.lower(): v for k, v in overrides.BUMP.items()}
 _WEDGE_CI = {k.lower(): v for k, v in overrides.WEDGES.items()}
+_ADP_OV_CI = {k.lower(): v for k, v in overrides.ADP_OVERRIDE.items()}
 
 # Preseason roster-technicality tags (NA/DNR/PUP) are mostly noise, not "will miss N games"
 # — don't nuke a startable player off a paperwork tag. IR is real but often not season-long.
@@ -270,7 +271,7 @@ def build_players():
         es = (espn_id.get(eid) if eid else None) or espn_name.get(_norm(name) + "|" + pos, {})
         srcs = [p for p in (r.get("proj"), es.get("proj")) if p is not None]
         proj = sum(srcs) / len(srcs) if srcs else None
-        adp = r.get("adp") or es.get("adp")   # RotoWire ADP preferred
+        adp = _ADP_OV_CI.get(name.lower()) or r.get("adp") or es.get("adp")  # override > RotoWire > ESPN
         draftable = adp is not None and adp < 250   # has a real draft position
         # don't silently drop players: only skip true clutter (no projection AND not draftable
         # AND not on a team). Keeps Aiyuk (proj gap) / Tyreek Hill (team=None) on the board.

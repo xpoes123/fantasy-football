@@ -232,6 +232,26 @@ def state(slot: int = 0):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/player")
+def player_lookup(q: str = ""):
+    """Search any player by name — value + whether they're still available. Kills the
+    'is X still on the board?' guesswork (and the stale-data mistakes)."""
+    if len(q.strip()) < 2:
+        return {"results": []}
+    b = board()
+    try:
+        drafted = {p["player_id"] for p in _api(f"draft/{config.DRAFT_ID}/picks")}
+    except Exception:
+        drafted = set()
+    ql = q.lower()
+    hits = sorted((p for p in b["players"] if ql in p["name"].lower()),
+                  key=lambda x: x["vor"], reverse=True)[:8]
+    return {"results": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
+                         "vor": p["vor"], "adp": p["adp"], "bye": p.get("bye"),
+                         "inj": p.get("inj"), "available": p["pid"] not in drafted}
+                        for p in hits]}
+
+
 @app.get("/")
 def index():
     return FileResponse(os.path.join(HERE, "static", "index.html"))

@@ -60,6 +60,12 @@
   .hc{color:var(--dim);font-size:11px}
   .stack{color:var(--purple);font-size:10px;font-weight:700}
   .block{color:var(--cyan);font-size:10px;font-weight:700}
+  #searchresults{margin:0 18px}
+  #searchresults:not(:empty){margin:0 18px 10px}
+  .sr{display:flex;gap:10px;align-items:center;padding:6px 10px;background:var(--panel);
+    border:1px solid var(--line);border-radius:6px;margin-bottom:4px;font-size:13px}
+  .sr .avail{color:var(--green);font-weight:700;font-size:11px}
+  .sr .taken{color:var(--red);font-weight:700;font-size:11px}
   .pairplan{background:color-mix(in srgb,var(--green) 12%,transparent);border:1px solid var(--green);
     border-radius:7px;padding:7px 11px;margin-bottom:9px;font-size:13px;color:var(--fg)}
   .fallhdr{color:var(--dim);font-size:10px;letter-spacing:1px;text-transform:uppercase;
@@ -87,12 +93,14 @@
   <div class="pick" id="pick">—</div>
   <div id="banner" class="banner waiting">connecting…</div>
   <div class="spacer"></div>
+  <input id="search" type="text" placeholder="🔍 look up any player" style="width:180px;text-align:left">
   <label>your slot <input id="slot" type="number" min="1" max="12" placeholder="auto"></label>
   <span id="slotinfo" style="color:var(--dim);font-size:12px"></span>
   <a class="sleeper" href="https://sleeper.com/draft/nfl/1395399705847947264" target="_blank" rel="noopener">open sleeper ↗</a>
   <span><span class="dot" id="live"></span><span id="clock" style="color:var(--dim);font-size:12px"></span></span>
 </header>
 <div id="err"></div>
+<div id="searchresults"></div>
 <div id="runbar"></div>
 <main>
   <section>
@@ -122,6 +130,25 @@ const posEl = p => `<span class="pos" style="color:var(--${p});background:color-
 const slotInput = $('slot');
 slotInput.value = localStorage.getItem('slot') || '';
 slotInput.oninput = () => { localStorage.setItem('slot', slotInput.value); tick(); };
+
+// player lookup — search any player for value + availability
+const searchInput=$('search'); let searchTimer;
+searchInput.oninput=()=>{
+  clearTimeout(searchTimer);
+  const q=searchInput.value.trim();
+  if(q.length<2){ $('searchresults').innerHTML=''; return; }
+  searchTimer=setTimeout(async()=>{
+    try{
+      const r=await fetch(`/api/player?q=${encodeURIComponent(q)}`);
+      const d=await r.json();
+      $('searchresults').innerHTML=(d.results||[]).map(p=>`
+        <div class="sr">${posEl(p.pos)}<span class="nm">${esc(p.name)}${injTag(p.inj)}</span>
+          <span class="${p.available?'avail':'taken'}">${p.available?'● AVAILABLE':'✗ DRAFTED'}</span>
+          <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${esc(p.team||'')}${p.bye?' B'+p.bye:''}</span></div>`).join('')
+        || '<div class="cliff">no match</div>';
+    }catch(e){ $('searchresults').innerHTML=''; }
+  }, 250);
+};
 
 function injTag(s){ return s ? ` <span class="inj">${esc(s)}</span>` : ''; }
 // DEF smarts: Week-1 matchup softness + roster conflict
