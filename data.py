@@ -132,6 +132,47 @@ def rotowire_proj(ttl=21600):
     return out
 
 
+DIVISIONS = {
+    "BUF":"AFCE","MIA":"AFCE","NE":"AFCE","NYJ":"AFCE","BAL":"AFCN","CIN":"AFCN","CLE":"AFCN",
+    "PIT":"AFCN","HOU":"AFCS","IND":"AFCS","JAX":"AFCS","TEN":"AFCS","DEN":"AFCW","KC":"AFCW",
+    "LV":"AFCW","LAC":"AFCW","DAL":"NFCE","NYG":"NFCE","PHI":"NFCE","WAS":"NFCE","CHI":"NFCN",
+    "DET":"NFCN","GB":"NFCN","MIN":"NFCN","ATL":"NFCS","CAR":"NFCS","NO":"NFCS","TB":"NFCS",
+    "ARI":"NFCW","LAR":"NFCW","SF":"NFCW","SEA":"NFCW",
+}
+
+
+def def_matchups(ttl=21600):
+    """team abbrev -> {opp, opp_pts} for the SOONEST game (Week 1). A DEF facing a low
+    implied-points offense = soft matchup (good streaming spot). Reuses the Odds API games."""
+    if not config.ODDS_API_KEY:
+        return {}
+    url = ("https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/"
+           f"?apiKey={config.ODDS_API_KEY}&regions=us&markets=spreads,totals&oddsFormat=american")
+    games = sorted(_get(url, ttl=ttl), key=lambda g: g.get("commence_time", ""))[:16]  # Week 1
+    out = {}
+    for g in games:
+        home, away = g["home_team"], g["away_team"]
+        total = spread_home = None
+        for bk in g.get("bookmakers", []):
+            for mk in bk.get("markets", []):
+                if mk["key"] == "totals" and total is None:
+                    total = mk["outcomes"][0].get("point")
+                if mk["key"] == "spreads" and spread_home is None:
+                    for o in mk["outcomes"]:
+                        if o["name"] == home:
+                            spread_home = o.get("point")
+            if total is not None and spread_home is not None:
+                break
+        if total is None or spread_home is None:
+            continue
+        ih, ia = total / 2 - spread_home / 2, total / 2 + spread_home / 2
+        ha, aa = NFL_ABBR.get(home), NFL_ABBR.get(away)
+        if ha and aa:
+            out[ha] = {"opp": aa, "opp_pts": round(ia, 1)}   # home DEF faces away offense
+            out[aa] = {"opp": ha, "opp_pts": round(ih, 1)}
+    return out
+
+
 def team_env(ttl=21600):
     """team abbrev -> offensive-environment multiplier from Vegas season implied points."""
     if not config.ODDS_API_KEY:

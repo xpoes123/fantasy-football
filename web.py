@@ -169,6 +169,19 @@ def compute_state(slot_override):
     for r in (recs or []) + (fallers or []):
         r["stack"] = _stack(r)
 
+    # DEF smarts: roster conflict (a DEF that plays your rostered players' division = faces them
+    # twice → negative correlation) + Week-1 matchup softness (facing a weak offense).
+    def_mx = data.def_matchups()
+    my_div = {}
+    for p in (my_roster or []):
+        d = data.DIVISIONS.get(p["team"])
+        if d:
+            my_div.setdefault(d, []).append(p["team"])
+    def _def_info(team):
+        d = data.DIVISIONS.get(team)
+        conflict = len({t for t in my_div.get(d, []) if t != team}) if d else 0
+        return {"conflict": conflict, "matchup": def_mx.get(team)}
+
     state = {
         "draft_name": draft["metadata"]["name"], "status": draft["status"],
         "overall": cur, "round": (cur - 1) // teams + 1, "in_round": (cur - 1) % teams + 1,
@@ -182,7 +195,8 @@ def compute_state(slot_override):
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
                             "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"], "bye": p.get("bye"),
                             "survive": surv_all.get(p["pid"]), "cliff": p["pid"] in cliff_pids,
-                            "stack": _stack(p), "block": block.get(p["name"].lower())}
+                            "stack": _stack(p), "block": block.get(p["name"].lower()),
+                            "def": _def_info(p["team"]) if p["pos"] == "DEF" else None}
                            for p in avail[:18]],
         "my_roster": [{"pos": p["pos"], "name": p["name"], "pts": round(p["adj_proj"]),
                        "bye": p.get("bye"), "hc": overrides.HANDCUFFS.get(p["name"])}

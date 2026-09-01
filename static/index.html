@@ -124,6 +124,18 @@ slotInput.value = localStorage.getItem('slot') || '';
 slotInput.oninput = () => { localStorage.setItem('slot', slotInput.value); tick(); };
 
 function injTag(s){ return s ? ` <span class="inj">${esc(s)}</span>` : ''; }
+// DEF smarts: Week-1 matchup softness + roster conflict
+function defTag(d){
+  if(!d) return '';
+  let out='';
+  if(d.matchup){
+    const pts=d.matchup.opp_pts, soft=pts<20, hard=pts>24;
+    const c=soft?'var(--green)':hard?'var(--red)':'var(--dim)';
+    out+=` <span style="color:${c};font-size:11px" title="Week 1: faces ${esc(d.matchup.opp)} (${pts} implied pts)">W1 vs ${esc(d.matchup.opp)} ${soft?'🟢':hard?'🔴':''}</span>`;
+  }
+  if(d.conflict>0) out+=` <span style="color:var(--yellow);font-size:11px" title="plays ${d.conflict} of your rostered teams (division) — negative correlation">⚠ hits ${d.conflict} of yours</span>`;
+  return out;
+}
 // survival-to-your-next-pick badge (bucketed per the turn-strategy spec)
 function survBadge(s){
   if(s==null) return '';
@@ -194,7 +206,7 @@ function render(s){
   $('avail').innerHTML = s.best_available.map(p=>`
     <div class="row">${posEl(p.pos)}<span class="nm">${esc(p.name)}${p.stack?' <span class="stack" title="stacks with your roster">🔗</span>':''}${p.block?` <span class="block" title="handcuff to ${esc(p.block.stud)} — owned by ${esc(p.block.owner)} (leverage play)">🔒 ${esc(p.block.stud)}'s backup</span>`:''}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${injTag(p.inj)}</span>
       ${survBadge(p.survive)}
-      <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${esc(p.team||'')}${p.bye?` <span class="${myByes.has(p.bye)?'byeclash':'byetag'}" title="bye week ${p.bye}${myByes.has(p.bye)?' — you already have players on this bye':''}">B${p.bye}</span>`:''}</span></div>`).join('');
+      <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${esc(p.team||'')}${p.bye?` <span class="${myByes.has(p.bye)?'byeclash':'byetag'}" title="bye week ${p.bye}${myByes.has(p.bye)?' — you already have players on this bye':''}">B${p.bye}</span>`:''}${defTag(p.def)}</span></div>`).join('');
 
   // roster + needs
   $('roster').innerHTML = s.my_roster.length ? s.my_roster.map(p=>`
