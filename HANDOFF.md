@@ -116,3 +116,20 @@ Loveland · DEF NE+JAX · K Trey Smack. Strong: elite WR corps, whole GB backfie
 4. Deploy: commit → push → on VPS `cd /opt/fantasy && git pull && systemctl restart fantasy`.
 5. Watch **fantasy.djiang.xyz** — auto-detects your slot, lights up on your pick, updates each pick.
 6. Response ~1-2s on the clock (cached between polls); 3s frontend poll.
+
+## 2026-09-01 session — objective rebuilt (game-theory + payouts)
+David steered: the model must adapt to opponents and maximize PAYOUT EV, not run a fixed strategy.
+- **`engine.finish_equity` / `config.OBJECTIVE="finish"`** — leaf is now payout-weighted EV of
+  final standing (Binomial-over-field finish dist × `config.PAYOUT`). Ceiling-seeking is ENDOGENOUS
+  → **RISK_LAMBDA upside hack retired** (don't reintroduce it). Payouts per league in `config.PAYOUTS`.
+- **Over-love fix (`data.py`)** — log-damp-cap soft priors (±20% max) + market-blend toward ADP
+  (keep edges, kill extremes). Hampton RB3→RB5. Late saturation brake 0.35→0.12.
+- **`backtest.py`** — 2024 preseason→actual: model 2398pts/finish 1.20 beats ADP 2025/4.00 &
+  proj-only 2101/2.50. Run for more slots/seasons.
+- **Committee flag** (`web.committee_map`, info only) — draftable RB whose mate is also drafted =
+  timeshare. `presnap`/`pretouch`/`depth` on players. `config.SEASON="2026"`.
+- **UI** — loading bar + `board_age_s`/`computed_ms` freshness.
+- **Deploy note:** VPS `git pull --ff-only` can refuse if the tree diverged — use
+  `git fetch && git reset --hard origin/main` to force-sync (it's a deploy clone, safe).
+- **Open thread:** finish-EV saturates early (VOR breaks ties). Fix: complete rollout rosters with
+  realistic ADP-discounted survivors, not best-available. Plus the day-of research sweep.
