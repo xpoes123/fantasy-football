@@ -192,7 +192,7 @@ function render(s){
   // best available
   const myByes=new Set(Object.keys(s.bye_warn||{}).map(Number));
   $('avail').innerHTML = s.best_available.map(p=>`
-    <div class="row">${posEl(p.pos)}<span class="nm">${esc(p.name)}${p.stack?' <span class="stack" title="stacks with your roster">🔗</span>':''}${p.block?` <span class="block" title="handcuff to ${esc(p.block.owner)}'s ${esc(p.block.stud)} — leverage play">🔒 ${esc(p.block.owner)}</span>`:''}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${injTag(p.inj)}</span>
+    <div class="row">${posEl(p.pos)}<span class="nm">${esc(p.name)}${p.stack?' <span class="stack" title="stacks with your roster">🔗</span>':''}${p.block?` <span class="block" title="handcuff to ${esc(p.block.stud)} — owned by ${esc(p.block.owner)} (leverage play)">🔒 ${esc(p.block.stud)}'s backup</span>`:''}${p.cliff?' <span class="cliffmark" title="last player before a tier cliff">▼</span>':''}${injTag(p.inj)}</span>
       ${survBadge(p.survive)}
       <span class="meta"><b>vor</b> ${Math.round(p.vor)} &nbsp;<b>adp</b> ${p.adp.toFixed(1)} &nbsp;${esc(p.team||'')}${p.bye?` <span class="${myByes.has(p.bye)?'byeclash':'byetag'}" title="bye week ${p.bye}${myByes.has(p.bye)?' — you already have players on this bye':''}">B${p.bye}</span>`:''}</span></div>`).join('');
 
