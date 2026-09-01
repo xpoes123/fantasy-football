@@ -101,22 +101,25 @@ def _handcuff_count(roster):
 
 
 def _complete(roster, avail_by_vor):
-    """Greedily fill a partial roster to 15 so byes/depth/K/DEF enter the objective.
-    Ensures one K and one DEF (their starter slots would otherwise score 0)."""
+    """Greedily fill a partial roster to 15 so byes/depth enter the objective. Guarantees the
+    single-starter slots the VOR-greedy fill would skip (QB/TE/K/DEF are all low-VOR) — else a
+    QB-less roster scores as if its QB slot is empty, wildly over-valuing an early QB/TE pick."""
     need = 15 - len(roster)
     if need <= 0:
         return roster
-    have = {p["pos"] for p in roster}
+    cnt = {}
+    for p in roster:
+        cnt[p["pos"]] = cnt.get(p["pos"], 0) + 1
     picked = []
-    for pos in ("K", "DEF"):
-        if pos not in have:
-            nxt = next((p for p in avail_by_vor if p["pos"] == pos), None)
+    for pos in ("QB", "TE", "K", "DEF"):        # you WILL draft one of each — model that
+        if cnt.get(pos, 0) == 0:
+            nxt = next((p for p in avail_by_vor if p["pos"] == pos and p not in picked), None)
             if nxt:
                 picked.append(nxt)
     for p in avail_by_vor:
         if len(picked) >= need:
             break
-        if p["pos"] in ("K", "DEF") or p in picked:
+        if p["pos"] in ("QB", "K", "DEF") or p in picked:   # one is enough at these
             continue
         picked.append(p)
     return roster + picked[:need]

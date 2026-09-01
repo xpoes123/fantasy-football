@@ -214,22 +214,28 @@ function render(s){
     `<div><span class="p">#${r.pick} ${esc(r.pos)}</span> ${esc(r.name)} <span class="p">→ ${esc(r.who)}</span></div>`).join('');
 }
 
+let ticking=false;
 async function tick(){
+  if(ticking) return; ticking=true;
+  $('live').style.background='var(--yellow)';
+  $('clock').textContent='⟳ updating…';
   try{
     const slot = slotInput.value || 0;
     const r = await fetch(`/api/state?slot=${slot}`);
     const s = await r.json();
-    if(s.error){ $('err').textContent = 'error: '+s.error; return; }
+    if(s.error){ $('err').textContent='error: '+s.error; $('live').style.background='var(--red)'; $('clock').textContent='error'; return; }
     render(s);
-    $('live').style.background = 'var(--green)';
-    $('clock').textContent = new Date().toLocaleTimeString();
+    $('err').textContent='';
+    $('live').style.background='var(--green)';
+    $('clock').textContent='live · '+new Date().toLocaleTimeString();
   }catch(e){
-    $('err').textContent = 'connection lost — retrying…';
-    $('live').style.background = 'var(--red)';
-  }
+    $('err').textContent='connection lost — retrying…';
+    $('live').style.background='var(--red)';
+    $('clock').textContent='reconnecting…';
+  } finally { ticking=false; }
 }
 tick();
-setInterval(tick, 4000);
+setInterval(tick, 3000);
 </script>
 </body>
 </html>
