@@ -119,7 +119,13 @@ def compute_state(slot_override):
                        "survive": surv.get(x["player"]["pid"])} for x in r]
             # Only recommend players realistically THERE at your pick — a 22%-survival elite
             # isn't a "pick", it's a "hope". Split targets from snap-if-they-fall.
-            recs = [x for x in scored if (x["survive"] or 0) >= 0.45][:6]
+            targets = [x for x in scored if (x["survive"] or 0) >= 0.45]
+            # Within the same value tier, prefer players who WON'T survive to your next pick
+            # (urgency). Stops it recommending a safe-forever QB over a scarcer pick you must
+            # grab now — take the urgent one, get the safe one later.
+            targets.sort(key=lambda x: (x["exp"], x["vor"] * (1 - 0.5 * (x["survive"] or 0))),
+                         reverse=True)
+            recs = targets[:6]
             fallers = sorted([x for x in scored if (x["survive"] or 0) < 0.45],
                              key=lambda z: -z["vor"])[:4]
             pair = [x["name"] for x in recs[:2]]   # the two you'll likely leave the turn with
