@@ -129,28 +129,46 @@ def _handcuff_count(roster):
                if overrides.HANDCUFFS.get(p["name"]) in names)
 
 
-def _complete(roster, avail_by_vor):
-    """Greedily fill a partial roster to 15 so byes/depth enter the objective. Guarantees the
-    single-starter slots the VOR-greedy fill would skip (QB/TE/K/DEF are all low-VOR) — else a
-    QB-less roster scores as if its QB slot is empty, wildly over-valuing an early QB/TE pick."""
+def _complete(roster, avail_by_vor, fill_picks=None):
+    """Fill a partial roster to 15 so byes/depth enter the objective. Guarantees the single-starter
+    slots the VOR-greedy fill would skip (QB/TE/K/DEF are all low-VOR).
+
+    CRITICAL: fill with REALISTICALLY-available players, not the best on the board. `fill_picks` is
+    the list of overall pick numbers those empty slots map to (your real future picks); a player
+    whose ADP is well before pick P won't survive to P, so we gate each fill to adp >= ~0.7*P. Best-
+    available fill made every team look 5 SDs above the field → the objective saw a lock for 1st and
+    chased FLOOR. Realistic fill puts you at your true strength, so the objective chases CEILING when
+    that's what wins the money. (No fill_picks -> legacy best-available.)"""
     need = 15 - len(roster)
     if need <= 0:
         return roster
     cnt = {}
     for p in roster:
         cnt[p["pos"]] = cnt.get(p["pos"], 0) + 1
+    fp = list(fill_picks or [])
     picked = []
+
+    def grab(pos, min_adp):
+        """Best-VOR available player (optional pos) realistically still there at min_adp."""
+        cand = next((p for p in avail_by_vor if p not in picked and (not pos or p["pos"] == pos)
+                     and p["adp"] >= min_adp), None)
+        return cand or next((p for p in avail_by_vor if p not in picked
+                             and (not pos or p["pos"] == pos)), None)
+
     for pos in ("QB", "TE", "K", "DEF"):        # you WILL draft one of each — model that
         if cnt.get(pos, 0) == 0:
-            nxt = next((p for p in avail_by_vor if p["pos"] == pos and p not in picked), None)
+            madp = fp[len(picked)] * 0.7 if len(picked) < len(fp) else 0
+            nxt = grab(pos, madp)
             if nxt:
                 picked.append(nxt)
-    for p in avail_by_vor:
-        if len(picked) >= need:
+    while len(picked) < need:                   # remaining depth: RB/WR/TE flex-eligible
+        madp = fp[len(picked)] * 0.7 if len(picked) < len(fp) else 0
+        nxt = grab(None, madp)
+        if not nxt or nxt["pos"] in ("QB", "K", "DEF"):   # one is enough at single slots
+            nxt = grab("RB", madp) or grab("WR", madp) or grab("TE", madp) or grab(None, 0)
+        if not nxt:
             break
-        if p["pos"] in ("QB", "K", "DEF") or p in picked:   # one is enough at these
-            continue
-        picked.append(p)
+        picked.append(nxt)
     return roster + picked[:need]
 
 
@@ -214,15 +232,15 @@ def league_baseline(players, teams=config.NUM_TEAMS, rounds=config.ROUNDS):
     ms, vs = zip(*(weekly_moments(ro) for ro in rosters))
     mu_L = sum(ms) / len(ms)
     tau = (sum((m - mu_L) ** 2 for m in ms) / len(ms)) ** 0.5
-    return mu_L, sum(vs) / len(vs), tau
+    return mu_L, sum(vs) / len(vs), max(tau, config.FIELD_SPREAD)   # floor to realistic spread
 
 
-def _leaf(roster, avail_by_vor, baseline):
+def _leaf(roster, avail_by_vor, baseline, fill_picks=None):
     """Score a roster at a rollout leaf (completing it to 15 first). OBJECTIVE selects:
     'finish' = payout-weighted final-standing EV (opponent + prize aware, default);
     'wins' = legacy variance-aware expected wins; else deterministic sum-of-projections."""
     if config.OBJECTIVE in ("finish", "wins") and baseline:
-        full = _complete(roster, avail_by_vor)
+        full = _complete(roster, avail_by_vor, fill_picks)
         mu, var = weekly_moments(full)
         insurance = config.HANDCUFF_BONUS * _handcuff_count(full)
         if config.OBJECTIVE == "finish":
@@ -293,7 +311,7 @@ def _slot_on_clock(pick_no, teams=config.NUM_TEAMS):
 
 
 def _rollout(candidate, my_roster, universe, drafted, my_future, cur_pick, rng, baseline,
-             opp_rosters=None, recent0=None):
+             opp_rosters=None, recent0=None, my_all=None):
     """One simulated future. Returns end-horizon roster value if I take `candidate` now.
     Opponents pick by real roster needs when opp_rosters (slot -> [positions]) is seeded."""
     taken = set(drafted)
@@ -322,7 +340,10 @@ def _rollout(candidate, my_roster, universe, drafted, my_future, cur_pick, rng, 
         if p:
             avail.remove(p)
     avail.sort(key=lambda x: x["vor"], reverse=True)
-    return _leaf(roster, avail, baseline)
+    # the slots _complete will fill map to my real picks BEYOND the simulated horizon — gate their
+    # quality by those pick numbers so the roster is realistic, not a best-available dream team.
+    fill_picks = [pk for pk in (my_all or []) if pk > horizon]
+    return _leaf(roster, avail, baseline, fill_picks)
 
 
 def survival_probs(players, drafted, cur_pick, my_next, rollouts=200, seed=0, top_n=70,
@@ -427,11 +448,11 @@ def recommend(players, drafted, my_roster, my_slot, cur_pick,
                 cands.append(p); have.add(p["pid"]); break
 
     baseline = league_baseline(players) if config.OBJECTIVE in ("finish", "wins") else None
-    base = _leaf(my_roster, avail_by_vor, baseline)
+    base = _leaf(my_roster, avail_by_vor, baseline, [pk for pk in my_all if pk > cur_pick])
     results = []
     for c in cands:
         vals = [_rollout(c, my_roster, universe, drafted, my_future, cur_pick,
-                         random.Random((seed or 0) + i), baseline, opp_rosters, recent0)
+                         random.Random((seed or 0) + i), baseline, opp_rosters, recent0, my_all)
                 for i in range(rollouts)]
         exp = sum(vals) / len(vals)
         results.append({"player": c, "exp_value": exp, "delta": exp - base})

@@ -48,6 +48,12 @@ PAYOUTS = {
 }
 PAYOUT = PAYOUTS.get(LEAGUE_ID, {1: 8, 2: 3, 3: 1})
 PLAYOFF_TEAMS = 6       # top-N make the playoffs (unused by v1 season-rank model; kept for bracket ext.)
+# Realistic between-team weekly strength spread. league_baseline snake-drafts 12 near-identical
+# ADP teams, so its measured spread (~7) is far too tight — it makes any good roster look like a
+# lock for 1st, which pushes the objective toward FLOOR. Real 12-team leagues spread ~12-14 pts/wk
+# (draft skill + slot luck), and the contenders sit close to you — so ceiling is what wins the
+# money. Floor the field spread here so the objective competes against real contenders.
+FIELD_SPREAD = 13.0
 # weekly coefficient of variation by position (how boom/bust a weekly score is)
 POS_CV = {"QB": 0.30, "RB": 0.55, "WR": 0.65, "TE": 0.75, "K": 0.70, "DEF": 0.90}
 GAMES = 17              # games a season projection is spread across
