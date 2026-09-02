@@ -114,8 +114,19 @@ WEDGES = {
 ADP_OVERRIDE = {
     # player name -> current market ADP, for when news has moved a player past the stale feed
     # ADP (e.g. Lloyd surged to ~90 on the Jacobs news but the projection feed still said 158).
-    # Populated by the day-of research sweep; robust (no fragile live scrape).
-    # "MarShawn Lloyd": 90,
+    # Populated by the day-of research sweep (2026-09-02).
+    # Risers (news pushed them up boards — helps the opponent sim expect them earlier):
+    "MarShawn Lloyd": 70,      # Jacobs exempt -> prospective GB lead
+    "Mike Washington": 120,    # Jeanty ankle -> top handcuff, explosive preseason
+    "Keenan Allen": 95,        # signed to target-thin Colts
+    "Stefon Diggs": 95,        # signed to WAS, rapport w/ Daniels
+    "Jonathon Brooks": 120,    # took CAR starting nod over Hubbard
+    "George Kittle": 55,       # off PUP, targeting Wk1
+    # Fallers/out (align the fade + keep the opponent sim from reaching):
+    "Josh Jacobs": 150,        # exempt list, functionally out
+    "Ashton Jeanty": 21,       # ankle, Wk1 in doubt
+    "Alvin Kamara": 85,        # MCL, ~1 month
+    "Jayden Higgins": 205,     # torn ACL, off boards
 }
 
 BUMP = {
@@ -149,7 +160,7 @@ BUMP = {
     "Kyle Pitts": 1.08,
     "Kyler Murray": 1.08,
     "Malik Nabers": 1.08,
-    "RJ Harvey": 1.08,
+    "RJ Harvey": 0.9,     # day-of flip: Dobbins atop DEN depth chart, Harvey boxed to passing-down
     "Terrance Ferguson": 1.08,
     "Tucker Kraft": 1.08,
     "Wan'Dale Robinson": 1.08,
@@ -228,7 +239,7 @@ BUMP = {
     "Aaron Jones": 0.9,
     "Cole Kmet": 0.9,
     "Cooper Kupp": 0.9,
-    "J.K. Dobbins": 0.9,
+    "J.K. Dobbins": 1.05,   # day-of flip: DEN lead back (early-down + goal-line) post-Lisfranc
     "Jameson Williams": 0.9,
     "Pat Freiermuth": 0.9,
     "Rashod Bateman": 0.9,
