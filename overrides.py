@@ -116,7 +116,7 @@ ADP_OVERRIDE = {
     # ADP (e.g. Lloyd surged to ~90 on the Jacobs news but the projection feed still said 158).
     # Populated by the day-of research sweep (2026-09-02).
     # Risers (news pushed them up boards — helps the opponent sim expect them earlier):
-    "MarShawn Lloyd": 70,      # Jacobs exempt -> prospective GB lead
+    "MarShawn Lloyd": 95,      # Jacobs exempt but COMMITTEE w/ Kaleb Johnson — not a clean lead
     "Mike Washington": 120,    # Jeanty ankle -> top handcuff, explosive preseason
     "Keenan Allen": 95,        # signed to target-thin Colts
     "Stefon Diggs": 95,        # signed to WAS, rapport w/ Daniels
@@ -130,7 +130,9 @@ ADP_OVERRIDE = {
 }
 
 BUMP = {
-    "MarShawn Lloyd": 1.15,   # scheme only; Jacobs-out workload now auto-transferred in data.py
+    "MarShawn Lloyd": 0.82,   # COMMITTEE w/ Kaleb Johnson (ex-PIT) — temper: he gets the full
+                              #   Jacobs workload-transfer already, so fade the scheme bump to net out
+    "Kaleb Johnson": 1.15,    # traded PIT->GB; real committee share w/ Jacobs out (proj still stale-low)
     "Ashton Jeanty": 1.13,
     "DeVonta Smith": 1.12,
     "Omarion Hampton": 1.12,
@@ -252,7 +254,6 @@ BUMP = {
     "Jalen McMillan": 0.85,
     "Jerry Jeudy": 0.85,
     "Josh Jacobs": 0.85,
-    "Kaleb Johnson": 0.85,
     "Keon Coleman": 0.85,
     "Travis Hunter": 0.85,
     "Xavier Legette": 0.85,
