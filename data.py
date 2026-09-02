@@ -83,6 +83,26 @@ def sleeper_players(ttl=86400):
     return _get("https://api.sleeper.app/v1/players/nfl", ttl=ttl)
 
 
+def prev_rush_yards(ttl=86400):
+    """player_id -> prior-season rushing yards. Used to identify rushing ('Konami') QBs — a stable
+    trait that raw projections underrate. Falls back to {} on any error."""
+    try:
+        prev = str(int(config.SEASON) - 1)
+        raw = _get(f"https://api.sleeper.app/v1/stats/nfl/regular/{prev}", ttl=ttl)
+    except Exception:
+        return {}
+    return {pid: (s or {}).get("rush_yd") or 0 for pid, s in (raw or {}).items() if isinstance(s, dict)}
+
+
+def konami_factor(rush_yd):
+    """Value bump for a rushing QB, scaled by prior-year rush yards (0 below KONAMI_YD_LO, up to
+    KONAMI_BUMP at KONAMI_YD_HI). Bounded and fed through the same log-damp-cap as other signals."""
+    if not rush_yd or rush_yd <= config.KONAMI_YD_LO:
+        return 1.0
+    frac = min(1.0, (rush_yd - config.KONAMI_YD_LO) / (config.KONAMI_YD_HI - config.KONAMI_YD_LO))
+    return 1.0 + config.KONAMI_BUMP * frac
+
+
 def preseason_usage(ttl=43200):
     """player_id -> (snap_share, touches) from this year's preseason games. Reveals who won a
     role — snap%, carries+targets. INFO ONLY: established starters rest in preseason (Bijan/CMC
@@ -278,6 +298,7 @@ def build_players():
     espn_id, espn_name = espn_proj_adp()         # fallback only
     env = team_env()
     pre = preseason_usage()                      # {pid: (snap_share, touches)} — info flag only
+    rush = prev_rush_yards()                     # {pid: prior-year rush yds} — for the Konami-QB premium
 
     players = []
     for pid, m in sl.items():
@@ -303,9 +324,11 @@ def build_players():
             proj = {"K": 116.0, "DEF": 100.0}.get(pos, 40.0)
         # Soft situational priors (all proxy "good spot") -> combine in log-space with damping +
         # a hard cap so they can't compound into runaway over-love. Injury is a separate real haircut.
+        ry = rush.get(pid, 0)
         signals = [env.get(m.get("team"), 1.0), age_mult(pos, m.get("age")),
                    SOS_TEAM.get(m.get("team"), 1.0), COACHING.get(m.get("team"), 1.0),
-                   _BUMP_CI.get(name.lower(), 1.0), _WEDGE_CI.get(name.lower(), 1.0)]
+                   _BUMP_CI.get(name.lower(), 1.0), _WEDGE_CI.get(name.lower(), 1.0),
+                   konami_factor(ry) if pos == "QB" else 1.0]
         logsum = sum(math.log(s) for s in signals if s > 0)
         factor = min(config.SIGNAL_CAP_HI, max(config.SIGNAL_CAP_LO,
                                                math.exp(config.SIGNAL_DAMP * logsum)))
@@ -317,7 +340,7 @@ def build_players():
             "proj": round(proj, 1), "base_adj": base_adj, "adj_proj": round(base_adj, 1),
             "adp": adp if adp else 999.0, "bye": BYES.get(m.get("team")),
             "presnap": ps[0] if ps else None, "pretouch": ps[1] if ps else None,
-            "depth": m.get("depth_chart_order"),
+            "depth": m.get("depth_chart_order"), "rush_yd": ry if pos == "QB" else None,
         })
 
     # ① Market blend: regress each model value toward what the market (ADP) implies for that draft

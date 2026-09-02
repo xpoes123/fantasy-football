@@ -419,6 +419,16 @@ def recommend(players, drafted, my_roster, my_slot, cur_pick,
     # low-value depth (they don't stack, and you'd rather flex RB/WR). QB also stays gated
     # early (deepest/streamable): only recommend one once it's mid-draft and you lack one.
     allow_qb = ("QB" not in have_pos) and (my_remaining <= config.ROUNDS - 5)
+    # ...but an ELITE rushing QB (Konami) may be taken a couple rounds earlier — its floor+ceiling
+    # edge is worth a reach the pocket QBs aren't. Pocket QBs still wait for the normal gate.
+    qb_early = ("QB" not in have_pos) and (my_remaining <= config.ROUNDS - 1)  # round 2+
+
+    def _qb_ok(p):
+        if p["pos"] != "QB":
+            return True
+        if "QB" in have_pos:
+            return False
+        return allow_qb or (qb_early and (p.get("rush_yd") or 0) >= config.KONAMI_ELITE_YD)
     allow_te = "TE" not in have_pos
 
     # candidate set: top-k available by VOR, plus best available at each unfilled starter pos.
@@ -428,7 +438,7 @@ def recommend(players, drafted, my_roster, my_slot, cur_pick,
              and (allow_kdef or p["pos"] not in ("K", "DEF"))
              and not (p["pos"] == "K" and "K" in have_pos)
              and not (p["pos"] == "DEF" and "DEF" in have_pos)
-             and (allow_qb or p["pos"] != "QB")
+             and _qb_ok(p)
              and (allow_te or p["pos"] != "TE")]
     # MUST-FILL: if you have only enough picks left to fill your empty mandatory starter slots
     # (K/DEF), force them now — otherwise upside mode buries the "streamable" DEF and you field

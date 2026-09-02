@@ -90,6 +90,16 @@ SIGNAL_CAP_HI = 1.20    # ...nor lift it above +20%
 BLEND_FREE = 0.12       # divergence (fraction of market value) kept fully — your real edge
 BLEND_K = 3.0           # shrink rate beyond BLEND_FREE (bigger = harder pull to market)
 
+# --- rushing-QB ("Konami") premium ---
+# Rushing QBs carry a floor+ceiling edge raw projections underrate (rush yards are consistent AND
+# add TD upside; the overall QB1 has run for 350+ yds every year since 2019). Give a small bump
+# scaled by prior-year rush yards, and let the tool reach for an ELITE rusher a couple rounds
+# earlier than the normal wait-on-QB gate (a pocket QB still waits).
+KONAMI_BUMP = 0.06      # max value bump for a heavy rusher (bounded; still runs through log-damp-cap)
+KONAMI_YD_LO = 250      # rush yards where the bump starts...
+KONAMI_YD_HI = 550      # ...and where it maxes out
+KONAMI_ELITE_YD = 350   # a QB at/above this may be recommended early (exempt from the wait-on-QB gate)
+
 # --- roster synergy: correlations/combinations the sim should reward ---
 STACK_RHO = 0.35        # QB <-> same-team pass-catcher weekly correlation (raises ceiling)
 STACK_MU = 1.2          # weekly ceiling value added per QB+pass-catcher stack among starters
