@@ -133,3 +133,16 @@ David steered: the model must adapt to opponents and maximize PAYOUT EV, not run
   `git fetch && git reset --hard origin/main` to force-sync (it's a deploy clone, safe).
 - **Open thread:** finish-EV saturates early (VOR breaks ties). Fix: complete rollout rosters with
   realistic ADP-discounted survivors, not best-available. Plus the day-of research sweep.
+
+## 2026-09-01 (later) — validated & tuned via subagent mocks
+- **Subagent-mock harness**: `scratchpad/mock_wf.js` (Workflow) + `toolpick.py` bridge — 11 LLM GM
+  personas draft vs the tool at slot 11, a judge ranks all 12 rosters. Re-run: `Workflow({scriptPath})`.
+- **Floor→ceiling fix (DONE)**: `_complete` was building dream-teams (every roster ~5 SDs over the
+  field → objective protected floor). Now completes with realistically-available players
+  (`fill_picks`, adp-gated) + `config.FIELD_SPREAD=13` floors the too-tight baseline tau. Mock rank
+  5th→3rd. "ceiling helps" now holds to +17 vs field.
+- **Rushing-QB (Konami) premium (DONE)**: `data.konami_factor` (+6% cap, prior rush_yd) + QB-gate
+  exemption so elite rushers (>=`KONAMI_ELITE_YD` prior rush yds) are recommendable from round 2;
+  pocket QBs still wait. Tool now grabs Allen/Lamar when they fall.
+- **Open**: re-mock to confirm rushing-QB → top-2 (held, ~750k tokens/run); day-of research sweep;
+  no elite bell-cow RB reachable at slot 11 (structural).
