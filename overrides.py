@@ -26,6 +26,13 @@ GAMES_MISSED = {
     "Sam LaPorta": 1,       # hip flare-up, Wk1 questionable (low confidence)
     "Jeremiyah Love": 1,    # high-ankle sprain, ruled out Wk2
     "Jayden Higgins": 17,   # torn ACL (Aug 18) — season over
+    # --- day-of sweep (2026-09-02) new items, corroborated across agents ---
+    "Ricky Pearsall": 17,   # season-ending PCL surgery (SF WR) — off board
+    "Trey Benson": 17,      # knee, IR/season — opens ARI backfield (was Conner's handcuff)
+    "Isaac Guerendo": 4,    # pec, IR-return Wk5 (was the CMC handcuff — SF thin early)
+    "Isiah Pacheco": 4,     # back/MCL, IR-return ~Wk5
+    "Christian Kirk": 4,    # calf, IR-return Wk5
+    "Kyle Monangai": 3,     # hyperextended knee, multi-week
 }
 
 # starter RB -> the backup who inherits the workload (from a 2026 handcuff research sweep).
@@ -35,7 +42,7 @@ HANDCUFFS = {
     "Christian McCaffrey": "Jordan James",
     "Josh Jacobs": "MarShawn Lloyd",
     "Alvin Kamara": "Kendre Miller",
-    "James Conner": "Trey Benson",
+    "James Conner": "Jeremiyah Love",   # Benson out for year -> Love/Allgeier lead ARI early
     "Ashton Jeanty": "Raheem Mostert",
     "De'Von Achane": "Jaylen Wright",
     "Saquon Barkley": "Tank Bigsby",
