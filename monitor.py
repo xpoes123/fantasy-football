@@ -99,8 +99,10 @@ def main():
     lines = []
     h = (lambda s: lines.append(s))
     h(f"# 🏈 Fantasy monitor — {config.SEASON}" if MD else "=== FANTASY MONITOR ===")
+    league_results = []
     for lid, name, tn in drafted_leagues():
         r = scan_league(lid, tn, trend, board, idx)
+        league_results.append(r)
         if not r:
             continue
         h(f"\n## {name} ({tn}-team)" if MD else f"\n--- {name} ({tn}-team) ---")
@@ -125,9 +127,14 @@ def main():
             h(f"  SEND {trades._names(d['snd'])} → GET {trades._names(d['get'])} @ {d['team']} "
               f"(+{d['dmine']:.0f} you / {d['dtheirs']:+.0f} them)")
     out = "\n".join(lines)
+    urgent = any(need and cnt >= SPIKE for r in league_results if r
+                 for _p, cnt, _g, need in r["hot"])
     print(out)
     if "--post" in sys.argv:
-        post_discord(out)
+        if "--spike-only" in sys.argv and not urgent:
+            print("(spike-only: nothing urgent — not posting)")
+        else:
+            post_discord(out)
     return out
 
 
