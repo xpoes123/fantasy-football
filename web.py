@@ -48,6 +48,28 @@ def committee_map(players):
     return out
 
 
+def league_thin(opp_rosters, my_slot, cur_pick, teams):
+    """Positions the OPPONENTS are structurally short on — i.e. what will be a post-draft seller's
+    market, so accumulating surplus there now is trade capital. Single-slot holes (0 QB / 0 TE)
+    always count; RB/WR only when a team is badly short. Meaningful only a few rounds in.
+    Returns [(pos, n_teams_short)] for positions >=2 opponents lack."""
+    rnd = (cur_pick - 1) // teams + 1
+    if rnd < 6:
+        return []
+    short = {"QB": 0, "RB": 0, "WR": 0, "TE": 0}
+    for s, positions in opp_rosters.items():
+        if s == my_slot:
+            continue
+        c = {}
+        for p in positions:
+            c[p] = c.get(p, 0) + 1
+        if c.get("QB", 0) == 0: short["QB"] += 1
+        if c.get("TE", 0) == 0: short["TE"] += 1
+        if c.get("RB", 0) <= 1: short["RB"] += 1
+        if c.get("WR", 0) <= 2: short["WR"] += 1
+    return sorted(((p, n) for p, n in short.items() if n >= 2), key=lambda x: -x[1])
+
+
 app = FastAPI()
 _lock = threading.Lock()
 _board = {"players": None, "idx": None, "umap": None}
@@ -227,6 +249,7 @@ def compute_state(slot_override, draft_id=None):
         "recommendations": recs, "fallers": fallers, "pair": pair, "my_picks": my_picks,
         "cliffs": cliffs, "needs": need,
         "runs": runs, "elites_left": elites_left, "bye_warn": _bye_warn(my_roster),
+        "league_thin": league_thin(opp_rosters, slot, cur, teams),   # post-draft trade-capital signal
         "best_available": [{"pos": p["pos"], "name": p["name"], "team": p["team"],
                             "inj": p.get("inj"), "vor": p["vor"], "adp": p["adp"], "bye": p.get("bye"),
                             "committee": cmap.get(p["pid"]),

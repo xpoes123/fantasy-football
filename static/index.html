@@ -82,6 +82,8 @@
   .runbar{background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange);
     border:1px solid var(--orange);border-radius:6px;padding:5px 10px;margin:0 18px 8px;
     font-size:12.5px;font-weight:600}
+  #trademkt:not(:empty){background:color-mix(in srgb,var(--cyan) 12%,transparent);color:var(--cyan);
+    border:1px solid var(--cyan);border-radius:6px;padding:5px 10px;margin:0 18px 8px;font-size:12px}
   .cliff{font-size:12px;color:var(--dim);padding:3px 0}
   .cliff.steep{color:var(--yellow)}
   .needs{font-size:13px;color:var(--yellow);margin-top:8px}
@@ -110,6 +112,7 @@
 <div id="err"></div>
 <div id="searchresults"></div>
 <div id="runbar"></div>
+<div id="trademkt"></div>
 <main>
   <section>
     <h2>Recommended — your pick</h2>
@@ -214,6 +217,10 @@ function render(s){
     rb.innerHTML=`⚠ ${esc(s.runs.join(' & '))} run in progress — grab the last elite before the cliff${elBits?'  ·  '+esc(elBits):''}`;
   } else if(elBits){ rb.style.display='block'; rb.style.background='transparent'; rb.style.border='0'; rb.style.color='var(--dim)'; rb.innerHTML=elBits; }
   else { rb.style.display='none'; }
+
+  // trade-capital signal: positions the league is structurally short on (draft surplus to trade later)
+  const tm=$('trademkt'), lt=s.league_thin||[];
+  tm.innerHTML = lt.length ? `🔄 league thin at ${lt.map(x=>`${esc(x[0])} (${x[1]} teams)`).join(', ')} — surplus here is post-draft trade capital` : '';
 
   // recommendations — realistic targets at YOUR pick, not the best on the board
   const recRow=(r,i,top)=>`
