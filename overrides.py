@@ -13,6 +13,14 @@ Names are matched case-insensitively against the player's full name.
 
 # ponytail: availability needs a human — this dict is that knob. From a current-NFL sweep
 # (2026-08-31). Update as news breaks.
+# YOUR player reads for the trade engine (name -> the adj_proj YOU'd give him). Overrides the
+# board's value in trades.py so it never suggests moving a guy you're high on for one you're low on.
+# Use it for feel the model can't see (upside, injury risk, stale projections). Empty = trust model.
+VALUE_OVERRIDE = {
+    # e.g. "Kaleb Johnson": 165,   # you're high — feed proj is stale-low
+    #      "Cam Skattebo": 195,    # injury risk the projection doesn't price
+}
+
 GAMES_MISSED = {
     # per David's call — research pins this at a ~6-game suspension (healthy, returns ~Wk 7).
     # Change to 6 to make him a late-round stash instead of off-board.
