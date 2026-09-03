@@ -8,10 +8,29 @@ each position (for bye/injury/streaming). Trades reuse the trade engine.
 Run: python3 monitor.py            (all drafted 2026 leagues for config.MY_USER_ID)
      python3 monitor.py --md       (markdown, for posting to Discord / the share site)
 """
-import json, sys, urllib.request
+import json, os, sys, urllib.request
 import data, config, trades
 
-MD = "--md" in sys.argv
+MD = "--md" in sys.argv or "--post" in sys.argv
+SPIKE = 40000   # trending-add count that counts as a "stampede" worth an urgent ping
+
+
+def post_discord(text):
+    """Push the digest to a Discord channel via webhook (set DISCORD_WEBHOOK in .env). Chunks to
+    stay under Discord's 2000-char limit."""
+    hook = os.environ.get("DISCORD_WEBHOOK")
+    if not hook:
+        print("(no DISCORD_WEBHOOK set — printed only)"); return
+    chunk = ""
+    for line in text.split("\n") + ["\x00"]:
+        if line == "\x00" or len(chunk) + len(line) + 1 > 1900:
+            if chunk.strip():
+                req = urllib.request.Request(hook, data=json.dumps({"content": chunk}).encode(),
+                                             headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=15)
+            chunk = ""
+        if line != "\x00":
+            chunk += line + "\n"
 
 
 def _api(path):
@@ -89,8 +108,13 @@ def main():
         if r["hot"]:
             h("🔥 hot waivers (trending & available):")
             for p, cnt, gain, need in r["hot"][:5]:
-                flag = " ⭐NEED" if need else (f" +{gain:.0f} lineup" if gain >= 2 else "")
-                h(f"  {p['pos']} {p['name']} — {cnt} adds/24h{flag}")
+                if need and cnt >= SPIKE:
+                    flag = " 🚨 GRAB (need + stampede)"
+                elif need:
+                    flag = " ⭐ fills need"
+                else:
+                    flag = f" +{gain:.0f} lineup" if gain >= 2 else ""
+                h(f"  {p['pos']} {p['name']} — {cnt:,} adds/24h{flag}")
         else:
             h("🔥 hot waivers: none available to you")
         h("📋 best free agent by pos: " + " · ".join(
@@ -102,6 +126,8 @@ def main():
               f"(+{d['dmine']:.0f} you / {d['dtheirs']:+.0f} them)")
     out = "\n".join(lines)
     print(out)
+    if "--post" in sys.argv:
+        post_discord(out)
     return out
 
 
