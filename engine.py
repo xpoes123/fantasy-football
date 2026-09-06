@@ -12,8 +12,10 @@ import config, overrides
 SLOT_ORDER = ["QB", "RB", "WR", "TE", "K", "DEF"]  # dedicated starter slots
 
 
-def snake_picks(slot, rounds=config.ROUNDS, teams=config.NUM_TEAMS):
+def snake_picks(slot, rounds=None, teams=None):
     """Overall pick numbers (1-indexed) belonging to `slot` in a snake draft."""
+    rounds = rounds or config.ROUNDS      # read LIVE (not bound at import) so per-league size works
+    teams = teams or config.NUM_TEAMS
     out = []
     for r in range(1, rounds + 1):
         out.append((r - 1) * teams + (slot if r % 2 else teams + 1 - slot))
@@ -217,10 +219,11 @@ def finish_equity(mu_me, var_me, mu_L, var_L, tau, payout, field=None):
     return ev
 
 
-def league_baseline(players, teams=config.NUM_TEAMS, rounds=config.ROUNDS):
+def league_baseline(players, teams=None, rounds=None):
     """(μ_L, var_L, τ): the field, from snake-drafting the top ADP players into `teams` rosters.
     μ_L/var_L = average opponent weekly moments; τ = between-team spread of weekly means (how
     separated the field's strengths are — drives how much finish variance is up for grabs)."""
+    teams = teams or config.NUM_TEAMS; rounds = rounds or config.ROUNDS
     order = sorted(players, key=lambda x: x["adp"])[: teams * rounds]
     rosters = [[] for _ in range(teams)]
     i = 0
@@ -304,7 +307,8 @@ def _opp_pick(avail_by_adp, pick_no, rng, opp_positions=None, recent=None, eps=0
     return cands[-1]
 
 
-def _slot_on_clock(pick_no, teams=config.NUM_TEAMS):
+def _slot_on_clock(pick_no, teams=None):
+    teams = teams or config.NUM_TEAMS
     r = (pick_no - 1) // teams + 1
     in_rnd = (pick_no - 1) % teams + 1
     return in_rnd if r % 2 else teams + 1 - in_rnd
