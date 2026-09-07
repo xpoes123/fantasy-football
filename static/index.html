@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Draft Advisor — Touchdowns and Transactions</title>
+<link rel="stylesheet" href="/static/tokyo-night.css">
 <style>
   :root{
     --bg:#1a1b26; --panel:#1f2335; --panel2:#24283b; --line:#2f334d;
-    --fg:#c0caf5; --dim:#565f89; --mut:#787c99;
-    --blue:#7aa2f7; --purple:#bb9af7; --cyan:#7dcfff; --green:#9ece6a;
-    --red:#f7768e; --orange:#ff9e64; --yellow:#e0af68; --teal:#73daca;
-    --RB:#ff9e64; --WR:#7aa2f7; --QB:#bb9af7; --TE:#9ece6a; --K:#565f89; --DEF:#565f89;
+    --fg:#c0caf5; --mut:#787c99;
+    --cyan:#7dcfff; --orange:#ff9e64; --yellow:#e0af68; --teal:#73daca;
+    --RB:#ff9e64; --WR:var(--blue); --QB:var(--purple); --TE:var(--green); --K:var(--muted); --DEF:var(--muted);
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);
@@ -20,7 +20,7 @@
     padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
   header h1{font-size:15px;margin:0;font-weight:600;color:var(--cyan)}
   .pick{font-size:22px;font-weight:700;color:var(--fg)}
-  .pick small{font-size:12px;color:var(--dim);font-weight:400}
+  .pick small{font-size:12px;color:var(--muted);font-weight:400}
   .banner{padding:5px 14px;border-radius:6px;font-weight:700;letter-spacing:.5px}
   .mine{background:var(--green);color:#12131c;animation:pulse 1.4s infinite}
   .waiting{background:var(--panel2);color:var(--mut)}
@@ -32,7 +32,7 @@
   @keyframes slide{0%{background-position:-40% 0}100%{background-position:140% 0}}
   #fresh.stale{color:var(--orange)} #fresh.old{color:var(--red)}
   .spacer{flex:1}
-  label{color:var(--dim);font-size:12px}
+  label{color:var(--muted);font-size:12px}
   input{background:var(--panel2);border:1px solid var(--line);color:var(--fg);
     border-radius:5px;padding:4px 7px;width:52px;font:inherit;text-align:center}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;
@@ -41,16 +41,16 @@
     max-width:1500px;margin:0 auto}
   @media(max-width:1000px){main{grid-template-columns:1fr}}
   section{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
-  h2{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);
+  h2{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);
     margin:0 0 10px;font-weight:600}
   .rec{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:7px;
     background:var(--panel2);margin-bottom:7px;border:1px solid transparent}
   .rec.top{border-color:var(--green);background:#1e2a1f}
-  .rec .rk{color:var(--dim);width:16px;text-align:center;font-weight:700}
+  .rec .rk{color:var(--muted);width:16px;text-align:center;font-weight:700}
   .rec.top .rk{color:var(--green)}
   .pos{font-weight:700;width:34px;text-align:center;border-radius:4px;padding:1px 0;font-size:12px}
   .nm{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .meta{color:var(--dim);font-size:12px;white-space:nowrap}
+  .meta{color:var(--muted);font-size:12px;white-space:nowrap}
   .meta b{color:var(--mut);font-weight:600}
   .exp{color:var(--teal);font-weight:700;font-size:13px;min-width:56px;text-align:right}
   .row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid #23263b}
@@ -64,7 +64,7 @@
   .s-slip{color:var(--orange);background:color-mix(in srgb,var(--orange) 15%,transparent)}
   .s-gone{color:var(--red);background:color-mix(in srgb,var(--red) 16%,transparent)}
   .cliffmark{color:var(--red);font-weight:700;font-size:11px}
-  .hc{color:var(--dim);font-size:11px}
+  .hc{color:var(--muted);font-size:11px}
   .stack{color:var(--purple);font-size:10px;font-weight:700}
   .block{color:var(--cyan);font-size:10px;font-weight:700}
   #searchresults{margin:0 18px}
@@ -75,23 +75,23 @@
   .sr .taken{color:var(--red);font-weight:700;font-size:11px}
   .pairplan{background:color-mix(in srgb,var(--green) 12%,transparent);border:1px solid var(--green);
     border-radius:7px;padding:7px 11px;margin-bottom:9px;font-size:13px;color:var(--fg)}
-  .fallhdr{color:var(--dim);font-size:10px;letter-spacing:1px;text-transform:uppercase;
+  .fallhdr{color:var(--muted);font-size:10px;letter-spacing:1px;text-transform:uppercase;
     margin:10px 0 5px;border-top:1px solid var(--line);padding-top:8px}
-  .byetag{color:var(--dim);font-size:10px;border:1px solid var(--line);border-radius:3px;padding:0 3px}
+  .byetag{color:var(--muted);font-size:10px;border:1px solid var(--line);border-radius:3px;padding:0 3px}
   .byeclash{color:var(--red);font-size:10px;border:1px solid var(--red);border-radius:3px;padding:0 3px;font-weight:700}
   .runbar{background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange);
     border:1px solid var(--orange);border-radius:6px;padding:5px 10px;margin:0 18px 8px;
     font-size:12.5px;font-weight:600}
   #trademkt:not(:empty){background:color-mix(in srgb,var(--cyan) 12%,transparent);color:var(--cyan);
     border:1px solid var(--cyan);border-radius:6px;padding:5px 10px;margin:0 18px 8px;font-size:12px}
-  .cliff{font-size:12px;color:var(--dim);padding:3px 0}
+  .cliff{font-size:12px;color:var(--muted);padding:3px 0}
   .cliff.steep{color:var(--yellow)}
   .needs{font-size:13px;color:var(--yellow);margin-top:8px}
   .needs.full{color:var(--green)}
   .recent{font-size:12.5px;color:var(--mut)}
-  .recent .p{color:var(--dim)}
+  .recent .p{color:var(--muted)}
   #err{color:var(--red);padding:0 18px}
-  .foot{color:var(--dim);font-size:11px;text-align:center;padding:8px}
+  .foot{color:var(--muted);font-size:11px;text-align:center;padding:8px}
   .sleeper{color:var(--cyan);text-decoration:none;border:1px solid var(--line);
     padding:4px 9px;border-radius:5px;font-size:12px}
 </style>
@@ -104,9 +104,9 @@
   <div class="spacer"></div>
   <input id="search" type="text" placeholder="🔍 look up any player" style="width:180px;text-align:left">
   <label>your slot <input id="slot" type="number" min="1" max="12" placeholder="auto"></label>
-  <span id="slotinfo" style="color:var(--dim);font-size:12px"></span>
+  <span id="slotinfo" style="color:var(--muted);font-size:12px"></span>
   <a class="sleeper" href="https://sleeper.com/draft/nfl/1395399705847947264" target="_blank" rel="noopener">open sleeper ↗</a>
-  <span><span class="dot" id="live"></span><span id="clock" style="color:var(--dim);font-size:12px"></span> <span id="fresh" style="font-size:11px"></span></span>
+  <span><span class="dot" id="live"></span><span id="clock" style="color:var(--muted);font-size:12px"></span> <span id="fresh" style="font-size:11px"></span></span>
 </header>
 <div id="loadbar"></div>
 <div id="err"></div>
@@ -172,7 +172,7 @@ function defTag(d){
   let out='';
   if(d.matchup){
     const pts=d.matchup.opp_pts, soft=pts<20, hard=pts>24;
-    const c=soft?'var(--green)':hard?'var(--red)':'var(--dim)';
+    const c=soft?'var(--green)':hard?'var(--red)':'var(--muted)';
     out+=` <span style="color:${c};font-size:11px" title="Week 1: faces ${esc(d.matchup.opp)} (${pts} implied pts)">W1 vs ${esc(d.matchup.opp)} ${soft?'🟢':hard?'🔴':''}</span>`;
   }
   if(d.conflict>0) out+=` <span style="color:var(--yellow);font-size:11px" title="plays ${d.conflict} of your rostered teams (division) — negative correlation">⚠ hits ${d.conflict} of yours</span>`;
@@ -215,7 +215,7 @@ function render(s){
   if(s.runs && s.runs.length){
     rb.style.display='block';
     rb.innerHTML=`⚠ ${esc(s.runs.join(' & '))} run in progress — grab the last elite before the cliff${elBits?'  ·  '+esc(elBits):''}`;
-  } else if(elBits){ rb.style.display='block'; rb.style.background='transparent'; rb.style.border='0'; rb.style.color='var(--dim)'; rb.innerHTML=elBits; }
+  } else if(elBits){ rb.style.display='block'; rb.style.background='transparent'; rb.style.border='0'; rb.style.color='var(--muted)'; rb.innerHTML=elBits; }
   else { rb.style.display='none'; }
 
   // trade-capital signal: positions the league is structurally short on (draft surplus to trade later)
