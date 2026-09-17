@@ -237,54 +237,63 @@ def scan_league(league_id, teams_n, trend, board, idx, week=None, inj_now=None):
     return {"needs": needs, "base": base, "hot": hot, "best": best, "deals": deals, "alerts": alerts}
 
 
-def _lineup_section(h, a):
-    """Render the set-your-lineup alerts (shared by full digest and --lineup-only)."""
-    for p in a["out_in"]:
-        why = "BYE" if p["inj"] not in BAD_INJ else p["inj"]
-        h(f"🚑 {p['pos']} {p['name']} is **{why}** but still in your lineup — bench him")
-    for up, down, d in a["swaps"]:
-        h(f"🔀 start {up['pos']} {up['name']} over {down['name']} (+{d:.1f}/wk)")
-    for pos, starter, fa in a["stream"]:
-        why = "on bye" if starter.get("inj") not in BAD_INJ else starter["inj"]
-        h(f"📡 stream {pos}: {starter['name']} is {why} — best available is {fa['name']}")
-
-
 def _has_alerts(a):
     return bool(a and (a["out_in"] or a["swaps"] or a["stream"]))
 
 
+def _adds(n):
+    """Compact trending-add count: 912056 -> '912k', 1250000 -> '1.2M'."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    return f"{n // 1000}k" if n >= 1000 else str(n)
+
+
+def _lineup_lines(a):
+    """Set-your-lineup alerts as Discord bullet lines."""
+    out = []
+    for p in a["out_in"]:
+        why = "on BYE" if p["inj"] not in BAD_INJ else p["inj"]
+        out.append(f"- 🚑 **{p['pos']} {p['name']}** is **{why}** — still starting, bench him")
+    for up, down, d in a["swaps"]:
+        out.append(f"- 🔀 start **{up['pos']} {up['name']}** over {down['name']}  `+{d:.1f}/wk`")
+    for pos, starter, fa in a["stream"]:
+        why = "on bye" if starter.get("inj") not in BAD_INJ else starter["inj"]
+        out.append(f"- 📡 stream **{pos}** — {starter['name']} is {why}, grab **{fa['name']}**")
+    return out
+
+
 def _league_block(name, tn, r):
     """One league's digest as its own string (one Discord message in the paced thread)."""
-    blk = []
-    g = blk.append
+    L = []
+    g = L.append
+    g(f"## {name}")
     if LINEUP_ONLY:
-        g(f"## {name}")
-        _lineup_section(g, r["alerts"])
-        return "\n".join(blk)
-    g(f"## {name} ({tn}-team)")
-    g(f"needs: {'/'.join(r['needs']) or 'none'}")
+        L += _lineup_lines(r["alerts"])
+        return "\n".join(L)
+    g(f"-# {tn}-team · " + (f"needs **{'/'.join(r['needs'])}**" if r["needs"] else "roster balanced"))
     if _has_alerts(r.get("alerts")):
-        _lineup_section(g, r["alerts"])
+        g("**⚙️ Lineup**")
+        L += _lineup_lines(r["alerts"])
     if r["hot"]:
-        g("🔥 hot waivers (trending & available):")
+        g("\n**🔥 Hot waivers**")
         for p, cnt, gain, need in r["hot"][:5]:
             if need and cnt >= SPIKE:
-                flag = " 🚨 GRAB (need + stampede)"
+                tag = "  🚨 **grab — need + stampede**"
             elif need:
-                flag = " ⭐ fills need"
+                tag = "  ⭐ fills need"
             else:
-                flag = f" +{gain:.0f} lineup" if gain >= 2 else ""
-            g(f"  {p['pos']} {p['name']} — {cnt:,} adds/24h{flag}")
-    else:
-        g("🔥 hot waivers: none available to you")
-    g("📋 best free agent by pos: " + " · ".join(
-        f"{pos} {r['best'][pos]['name'].split()[-1]}" for pos in ("QB", "RB", "WR", "TE") if r["best"][pos]))
+                tag = f"  `+{gain:.0f}`" if gain >= 2 else ""
+            g(f"- **{p['pos']}** {p['name']} · {_adds(cnt)} adds{tag}")
+    fa = " · ".join(f"{pos} {r['best'][pos]['name'].split()[-1]}"
+                    for pos in ("QB", "RB", "WR", "TE") if r["best"][pos])
+    if fa:
+        g(f"\n**📋 Best FA** · {fa}")
     if r["deals"]:
         d = r["deals"][0]
-        g("🔄 top trade:")
-        g(f"  SEND {trades._names(d['snd'])} → GET {trades._names(d['get'])} @ {d['team']} "
-          f"(+{d['dmine']:.0f} you / {d['dtheirs']:+.0f} them)")
-    return "\n".join(blk)
+        g("\n**🔄 Top trade**")
+        g(f"- send **{trades._names(d['snd'])}** → get **{trades._names(d['get'])}**")
+        g(f"-# @ {d['team']} · +{d['dmine']:.0f} you / {d['dtheirs']:+.0f} them")
+    return "\n".join(L)
 
 
 def main():
