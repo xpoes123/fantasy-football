@@ -11,7 +11,7 @@ Run: python3 monitor.py            (all drafted 2026 leagues for config.MY_USER_
 """
 import json, os, sys, urllib.request
 from collections import defaultdict
-import data, config, trades
+import data, config, trades, weekly
 
 MD = "--md" in sys.argv or "--post" in sys.argv
 LINEUP_ONLY = "--lineup-only" in sys.argv   # only the time-sensitive set-your-lineup checks
@@ -120,20 +120,19 @@ def fresh_injuries():
         return {}
 
 
-def wval(p, week):
-    """Weekly value proxy: 0 if on bye or won't play, else season adj_proj as a talent proxy.
-    # ponytail: no per-week matchup projections available; adj_proj is the proxy. Upgrade to a
-    # weekly source if one appears."""
+def wval(p, week, wk):
+    """This week's projected points: 0 if on bye or won't play, else the live weekly line (Sleeper),
+    falling back to the season proxy (adj_proj/GAMES) for players with no weekly line."""
     if not p:
         return -1.0
     if p.get("bye") == week or p.get("inj") in BAD_INJ:
         return 0.0
-    return p["adj_proj"]
+    return weekly.wk_points(p, week, wk)
 
 
-def optimize(pool, slots, week):
+def optimize(pool, slots, week, wk):
     """Best legal starting lineup from `pool` given Sleeper `slots` (roster_positions minus BN)."""
-    avail = sorted([p for p in pool if p], key=lambda p: -wval(p, week))
+    avail = sorted([p for p in pool if p], key=lambda p: -wval(p, week, wk))
     chosen, used = [], set()
     for s in [x for x in slots if x != "FLEX"]:
         c = next((p for p in avail if id(p) not in used and p["pos"] == s), None)
@@ -146,7 +145,7 @@ def optimize(pool, slots, week):
     return chosen
 
 
-def lineup_alerts(league_id, week, idx, inj_now, board, rostered):
+def lineup_alerts(league_id, week, idx, inj_now, board, rostered, wk):
     """For MY roster this week: (a) OUT/IR/bye players still in the starting lineup, (b) start/sit
     swaps where a bench player out-projects a starter, (c) K/DEF/QB streams when a starter can't go."""
     try:
@@ -168,7 +167,7 @@ def lineup_alerts(league_id, week, idx, inj_now, board, rostered):
     roster = list(pmap.values())
 
     out_in = [p for p in started if p["inj"] in BAD_INJ or p.get("bye") == week]
-    best = optimize(roster, slots, week)
+    best = optimize(roster, slots, week, wk)
     in_best, in_set = {id(p) for p in best}, {id(p) for p in started}
     # pair swaps only within a legal slot class: QB/K/DEF swap same-position, RB/WR/TE interchange via FLEX
     cls = lambda pos: pos if pos in ("QB", "K", "DEF") else "FLX"
@@ -181,10 +180,10 @@ def lineup_alerts(league_id, week, idx, inj_now, board, rostered):
             downs[cls(p["pos"])].append(p)
     swaps = []
     for c in ups:
-        u = sorted(ups[c], key=lambda p: -wval(p, week))
-        d = sorted(downs.get(c, []), key=lambda p: wval(p, week))
+        u = sorted(ups[c], key=lambda p: -wval(p, week, wk))
+        d = sorted(downs.get(c, []), key=lambda p: wval(p, week, wk))
         for up, dn in zip(u, d):
-            delta = (wval(up, week) - wval(dn, week)) / 17.0   # season adj_proj -> pts/week
+            delta = wval(up, week, wk) - wval(dn, week, wk)   # already this week's points
             if delta >= MIN_SWAP_WK:
                 swaps.append((up, dn, delta))
     swaps.sort(key=lambda t: -t[2])
@@ -192,15 +191,15 @@ def lineup_alerts(league_id, week, idx, inj_now, board, rostered):
     stream = []
     for pos in STREAM_POS:
         starter = next((p for p in started if p["pos"] == pos), None)
-        if starter and wval(starter, week) == 0:   # your guy is bye/out this week
+        if starter and wval(starter, week, wk) == 0:   # your guy is bye/out this week
             fa = sorted((p for p in board if p["pos"] == pos and p["pid"] not in rostered
-                         and wval(p, week) > 0), key=lambda p: -wval(p, week))
+                         and wval(p, week, wk) > 0), key=lambda p: -wval(p, week, wk))
             if fa:
                 stream.append((pos, starter, fa[0]))
     return {"out_in": out_in, "swaps": swaps, "stream": stream}
 
 
-def scan_league(league_id, teams_n, trend, board, idx, week=None, inj_now=None):
+def scan_league(league_id, teams_n, trend, board, idx, week=None, inj_now=None, wk=None):
     config.LEAGUE_ID = league_id
     config.NUM_TEAMS = teams_n
     trades.MY_ROSTER = []; trades.TEAM_PATCHES = {}   # live rosters (no patches for the monitor)
@@ -229,7 +228,7 @@ def scan_league(league_id, teams_n, trend, board, idx, week=None, inj_now=None):
                        key=lambda x: -x["adj_proj"])
         best[pos] = avail[0] if avail else None
     # time-sensitive set-your-lineup checks (OUT-in-lineup / start-sit / streaming)
-    alerts = lineup_alerts(league_id, week, idx, inj_now or {}, board, rostered) if week else None
+    alerts = lineup_alerts(league_id, week, idx, inj_now or {}, board, rostered, wk or {}) if week else None
     if LINEUP_ONLY:
         return {"needs": needs, "alerts": alerts}
     # trades
@@ -301,11 +300,12 @@ def main():
     idx = {p["pid"]: p for p in board}
     week = current_week()
     inj_now = fresh_injuries()
+    wk = weekly.weekly_proj(week)
     trend = {} if LINEUP_ONLY else trending_add()
     hdr = f"Week {week}" + (" — set your lineup" if LINEUP_ONLY else "")
     sections, results = [], []
     for lid, name, tn in drafted_leagues():
-        r = scan_league(lid, tn, trend, board, idx, week=week, inj_now=inj_now)
+        r = scan_league(lid, tn, trend, board, idx, week=week, inj_now=inj_now, wk=wk)
         if not r:
             continue
         if LINEUP_ONLY and not _has_alerts(r.get("alerts")):
