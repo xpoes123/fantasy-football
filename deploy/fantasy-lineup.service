@@ -1,0 +1,10 @@
+[Unit]
+Description=Fantasy lineup-lock check — OUT-in-lineup / start-sit / streaming (posts only if actionable)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fantasy
+EnvironmentFile=/opt/fantasy/.env
+ExecStart=/opt/fantasy/.venv/bin/python monitor.py --post --lineup-only

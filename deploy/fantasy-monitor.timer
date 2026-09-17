@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily fantasy digest at 9am ET
+
+[Timer]
+OnCalendar=*-*-* 09:00 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target
