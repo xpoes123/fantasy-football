@@ -1,0 +1,11 @@
+[Unit]
+Description=Pre-lock lineup pings — Thu/Sun/Mon before kickoff (ET)
+
+[Timer]
+OnCalendar=Thu 19:45 America/New_York
+OnCalendar=Sun 11:15 America/New_York
+OnCalendar=Mon 19:45 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target
