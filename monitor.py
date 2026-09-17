@@ -44,6 +44,24 @@ def post_sage(title, body, level="info"):
         urllib.request.urlopen(req, timeout=15)
 
 
+def post_monitor(title, sections, level="info"):
+    """Post the digest as a paced Sage thread: a header + one message per league, revealed on a ✅
+    reaction (Sage's /monitor_thread). Falls back to a single chunked /notify if that endpoint isn't
+    deployed yet."""
+    key = os.environ.get("SAGE_NOTIFY_KEY")
+    if not key:
+        print("(no SAGE_NOTIFY_KEY set — printed only)"); return
+    url = SAGE_NOTIFY.replace("/notify", "/monitor_thread")
+    req = urllib.request.Request(url, data=json.dumps({"title": title, "sections": sections}).encode(),
+                                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=15)
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise
+        post_sage(f"🏈 Fantasy monitor — {title}", "\n\n".join(sections), level)   # old Sage: no thread ep
+
+
 def _api(path):
     r = urllib.request.Request(f"https://api.sleeper.app/v1/{path}", headers={"User-Agent": "Mozilla/5.0"})
     return json.load(urllib.request.urlopen(r, timeout=20))
@@ -58,7 +76,23 @@ def drafted_leagues():
                 out.append((L["league_id"], L.get("name", "?"), L.get("total_rosters", 12)))
         except Exception:
             pass
-    return out
+    return _dedupe_by_name(out)
+
+
+def _dedupe_by_name(leagues):
+    """Two leagues can share a name (e.g. a re-created league). Keep the newest (highest Sleeper
+    id, which is time-ordered) per normalized name; drop the older stale clone."""
+    import re
+    best = {}
+    for lid, name, tn in leagues:
+        key = re.sub(r"[^a-z0-9]", "", name.lower())
+        if key not in best or int(lid) > int(best[key][0]):
+            best[key] = (lid, name, tn)
+    kept = set(v[0] for v in best.values())
+    for lid, name, _tn in leagues:
+        if lid not in kept:
+            print(f"(deduped: dropped older '{name}' {lid})")
+    return list(best.values())
 
 
 def trending_add(limit=40):
@@ -219,65 +253,69 @@ def _has_alerts(a):
     return bool(a and (a["out_in"] or a["swaps"] or a["stream"]))
 
 
+def _league_block(name, tn, r):
+    """One league's digest as its own string (one Discord message in the paced thread)."""
+    blk = []
+    g = blk.append
+    if LINEUP_ONLY:
+        g(f"## {name}")
+        _lineup_section(g, r["alerts"])
+        return "\n".join(blk)
+    g(f"## {name} ({tn}-team)")
+    g(f"needs: {'/'.join(r['needs']) or 'none'}")
+    if _has_alerts(r.get("alerts")):
+        _lineup_section(g, r["alerts"])
+    if r["hot"]:
+        g("🔥 hot waivers (trending & available):")
+        for p, cnt, gain, need in r["hot"][:5]:
+            if need and cnt >= SPIKE:
+                flag = " 🚨 GRAB (need + stampede)"
+            elif need:
+                flag = " ⭐ fills need"
+            else:
+                flag = f" +{gain:.0f} lineup" if gain >= 2 else ""
+            g(f"  {p['pos']} {p['name']} — {cnt:,} adds/24h{flag}")
+    else:
+        g("🔥 hot waivers: none available to you")
+    g("📋 best free agent by pos: " + " · ".join(
+        f"{pos} {r['best'][pos]['name'].split()[-1]}" for pos in ("QB", "RB", "WR", "TE") if r["best"][pos]))
+    if r["deals"]:
+        d = r["deals"][0]
+        g("🔄 top trade:")
+        g(f"  SEND {trades._names(d['snd'])} → GET {trades._names(d['get'])} @ {d['team']} "
+          f"(+{d['dmine']:.0f} you / {d['dtheirs']:+.0f} them)")
+    return "\n".join(blk)
+
+
 def main():
     board = data.build_players()
     idx = {p["pid"]: p for p in board}
     week = current_week()
     inj_now = fresh_injuries()
     trend = {} if LINEUP_ONLY else trending_add()
-    lines = []
-    h = (lambda s: lines.append(s))
     hdr = f"Week {week}" + (" — set your lineup" if LINEUP_ONLY else "")
-    h(f"# 🏈 Fantasy monitor — {hdr}" if MD else f"=== FANTASY MONITOR ({hdr}) ===")
-    league_results = []
+    sections, results = [], []
     for lid, name, tn in drafted_leagues():
         r = scan_league(lid, tn, trend, board, idx, week=week, inj_now=inj_now)
-        league_results.append(r)
         if not r:
             continue
-        if LINEUP_ONLY:
-            if _has_alerts(r.get("alerts")):
-                h(f"\n## {name}" if MD else f"\n--- {name} ---")
-                _lineup_section(h, r["alerts"])
-            continue
-        h(f"\n## {name} ({tn}-team)" if MD else f"\n--- {name} ({tn}-team) ---")
-        h(f"needs: {'/'.join(r['needs']) or 'none'}")
-        if _has_alerts(r.get("alerts")):
-            _lineup_section(h, r["alerts"])
-        if r["hot"]:
-            h("🔥 hot waivers (trending & available):")
-            for p, cnt, gain, need in r["hot"][:5]:
-                if need and cnt >= SPIKE:
-                    flag = " 🚨 GRAB (need + stampede)"
-                elif need:
-                    flag = " ⭐ fills need"
-                else:
-                    flag = f" +{gain:.0f} lineup" if gain >= 2 else ""
-                h(f"  {p['pos']} {p['name']} — {cnt:,} adds/24h{flag}")
-        else:
-            h("🔥 hot waivers: none available to you")
-        h("📋 best free agent by pos: " + " · ".join(
-            f"{pos} {r['best'][pos]['name'].split()[-1]}" for pos in ("QB", "RB", "WR", "TE") if r["best"][pos]))
-        if r["deals"]:
-            h("🔄 top trade:")
-            d = r["deals"][0]
-            h(f"  SEND {trades._names(d['snd'])} → GET {trades._names(d['get'])} @ {d['team']} "
-              f"(+{d['dmine']:.0f} you / {d['dtheirs']:+.0f} them)")
-    out = "\n".join(lines)
-    print(out)
-    has_alerts = any(_has_alerts(r.get("alerts")) for r in league_results if r)
-    out_in_lineup = any(r["alerts"]["out_in"] for r in league_results if r and r.get("alerts"))
+        if LINEUP_ONLY and not _has_alerts(r.get("alerts")):
+            continue   # quiet mode: only leagues that need a lineup change
+        results.append(r)
+        sections.append(_league_block(name, tn, r))
+
+    print(f"=== FANTASY MONITOR ({hdr}) ===\n\n" + "\n\n".join(sections))
+    out_in_lineup = any(r["alerts"]["out_in"] for r in results if r.get("alerts"))
     if "--post" in sys.argv:
-        if LINEUP_ONLY and not has_alerts:
-            print("(lineup-only: every lineup is set correctly — not posting)")
+        if not sections:
+            print("(nothing actionable — not posting)")
         elif "--spike-only" in sys.argv and not any(
-                need and cnt >= SPIKE for r in league_results if r for _p, cnt, _g, need in r["hot"]):
+                need and cnt >= SPIKE for r in results for _p, cnt, _g, need in r["hot"]):
             print("(spike-only: nothing urgent — not posting)")
         else:
-            # header line is lines[0]; use it as the Sage title, post the rest as the body
-            post_sage(f"🏈 Fantasy monitor — {hdr}", "\n".join(lines[1:]),
-                      level="warn" if out_in_lineup else "info")
-    return out
+            post_monitor(f"🏈 Fantasy monitor — {hdr}", sections,
+                         level="warn" if out_in_lineup else "info")
+    return sections
 
 
 if __name__ == "__main__":
