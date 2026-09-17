@@ -6,7 +6,8 @@ hype) intersected with who's actually available in YOUR league, and (2) the best
 each position (for bye/injury/streaming). Trades reuse the trade engine.
 
 Run: python3 monitor.py            (all drafted 2026 leagues for config.MY_USER_ID)
-     python3 monitor.py --md       (markdown, for posting to Discord / the share site)
+     python3 monitor.py --md       (markdown, for posting to Sage / the share site)
+     python3 monitor.py --post     (post the digest to David via Sage's Discord bot)
 """
 import json, os, sys, urllib.request
 from collections import defaultdict
@@ -19,24 +20,28 @@ BAD_INJ = {"Out", "IR", "PUP", "Sus", "DNR", "NA", "Doubtful"}   # won't (likely
 FLEX_POS = ("RB", "WR", "TE")
 STREAM_POS = ("QB", "K", "DEF")   # positions you routinely stream week-to-week
 MIN_SWAP_WK = 1.5   # only flag a start/sit worth ~1.5+ pts/week (season adj_proj / 17)
+SAGE_NOTIFY = os.environ.get("SAGE_NOTIFY_URL", "http://127.0.0.1:7779/notify")
 
 
-def post_discord(text):
-    """Push the digest to a Discord channel via webhook (set DISCORD_WEBHOOK in .env). Chunks to
-    stay under Discord's 2000-char limit."""
-    hook = os.environ.get("DISCORD_WEBHOOK")
-    if not hook:
-        print("(no DISCORD_WEBHOOK set — printed only)"); return
-    chunk = ""
-    for line in text.split("\n") + ["\x00"]:
-        if line == "\x00" or len(chunk) + len(line) + 1 > 1900:
-            if chunk.strip():
-                req = urllib.request.Request(hook, data=json.dumps({"content": chunk}).encode(),
-                                             headers={"Content-Type": "application/json"})
-                urllib.request.urlopen(req, timeout=15)
-            chunk = ""
-        if line != "\x00":
-            chunk += line + "\n"
+def post_sage(title, body, level="info"):
+    """Post the digest to David via Sage's /notify endpoint (bearer SAGE_NOTIFY_KEY). Sage truncates
+    each message to 1900 chars, so chunk the body and title each piece."""
+    key = os.environ.get("SAGE_NOTIFY_KEY")
+    if not key:
+        print("(no SAGE_NOTIFY_KEY set — printed only)"); return
+    chunks, cur = [], ""
+    for line in body.split("\n"):
+        if len(cur) + len(line) + 1 > 1700:   # leave room for the '**[LEVEL]** <title>\n' prefix
+            chunks.append(cur); cur = ""
+        cur += line + "\n"
+    if cur.strip():
+        chunks.append(cur)
+    for i, chunk in enumerate(chunks):
+        t = title if len(chunks) == 1 else f"{title} ({i + 1}/{len(chunks)})"
+        req = urllib.request.Request(SAGE_NOTIFY, data=json.dumps(
+            {"level": level, "title": t, "body": chunk}).encode(),
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=15)
 
 
 def _api(path):
@@ -261,6 +266,7 @@ def main():
     out = "\n".join(lines)
     print(out)
     has_alerts = any(_has_alerts(r.get("alerts")) for r in league_results if r)
+    out_in_lineup = any(r["alerts"]["out_in"] for r in league_results if r and r.get("alerts"))
     if "--post" in sys.argv:
         if LINEUP_ONLY and not has_alerts:
             print("(lineup-only: every lineup is set correctly — not posting)")
@@ -268,7 +274,9 @@ def main():
                 need and cnt >= SPIKE for r in league_results if r for _p, cnt, _g, need in r["hot"]):
             print("(spike-only: nothing urgent — not posting)")
         else:
-            post_discord(out)
+            # header line is lines[0]; use it as the Sage title, post the rest as the body
+            post_sage(f"🏈 Fantasy monitor — {hdr}", "\n".join(lines[1:]),
+                      level="warn" if out_in_lineup else "info")
     return out
 
 
