@@ -1,0 +1,10 @@
+[Unit]
+Description=Fantasy "what changed for your players" grounded brief -> Sage
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fantasy
+EnvironmentFile=/opt/fantasy/.env
+ExecStart=/opt/fantasy/.venv/bin/python brief.py --post

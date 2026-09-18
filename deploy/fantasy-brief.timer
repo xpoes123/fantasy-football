@@ -1,0 +1,10 @@
+[Unit]
+Description=What-changed brief — Tue & Sun 9:05am ET
+
+[Timer]
+OnCalendar=Tue 09:05 America/New_York
+OnCalendar=Sun 09:05 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target
