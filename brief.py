@@ -9,14 +9,38 @@ thread (one message per league) like the monitor.
 Run: python3 brief.py           (print only)
      python3 brief.py --post    (post to David via Sage)
 """
-import json, os, sys, urllib.request
+import json, os, re, sys, urllib.request
 import anthropic
 import data, config
 from monitor import drafted_leagues, _api, post_monitor, current_week
 
-# claude-api: default to Opus 4.8; set BRIEF_MODEL=claude-haiku-4-5 to cut cost on this recurring job.
-MODEL = os.environ.get("BRIEF_MODEL", "claude-opus-4-8")
+# Haiku: the job is grounded rewording of facts we fetched, schema-constrained — no Opus-level
+# reasoning needed. Set BRIEF_MODEL to override.
+MODEL = os.environ.get("BRIEF_MODEL", "claude-haiku-5-5")
 _UA = {"User-Agent": "Mozilla/5.0"}
+_NICK = {abbr: full.split()[-1].lower() for full, abbr in data.NFL_ABBR.items()}   # PHI -> eagles
+
+
+def _has(text, phrase):
+    return re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", text) is not None
+
+
+def news_for(p, news, league_last, roster_last):
+    """News items about player p: full-name match, or bare last name only when it can't be someone
+    else (unique league-wide, or unique on my roster and the item names his team)."""
+    full = data._norm(p["name"])
+    last = full.split()[-1]
+    nick = _NICK.get(p.get("team"))
+    out = []
+    for item in news:
+        t = data._norm(item)
+        if _has(t, full):
+            out.append(item)
+        elif len(last) > 3 and _has(t, last) and (
+                league_last.get(last, 0) <= 1
+                or (roster_last.get(last, 0) <= 1 and nick and _has(t, nick))):
+            out.append(item)
+    return out[:2]
 
 
 def espn_news():
@@ -40,6 +64,14 @@ def gather(idx, meta, news):
             rosters[name] = pls
             mine_pids.update(p["pid"] for p in pls)
 
+    def _lasts(pls):
+        c = {}
+        for q in pls:
+            ln = data._norm(q["name"]).split()[-1]
+            c[ln] = c.get(ln, 0) + 1
+        return c
+    league_last, roster_last = _lasts(idx.values()), _lasts(idx[p] for p in mine_pids if p in idx)
+
     facts = {}
     for pid in mine_pids:
         p = idx.get(pid)
@@ -56,9 +88,7 @@ def gather(idx, meta, news):
             bits.append(f"injury: {inj}")
         if (m.get("depth_chart_order") or 1) >= 3 and p["pos"] in ("RB", "WR", "TE", "QB"):
             bits.append(f"depth-chart #{m['depth_chart_order']}")
-        last = p["name"].split()[-1]
-        hits = [n for n in news if last in n and len(last) > 3][:2]
-        bits += [f"news: {n}" for n in hits]
+        bits += [f"news: {n}" for n in news_for(p, news, league_last, roster_last)]
         if bits:
             facts[pid] = {"player": f"{p['name']} ({p['pos']}, {p.get('team') or 'FA'})", "bits": bits}
     return rosters, facts
@@ -76,14 +106,14 @@ def synthesize(facts):
                                  "priority": {"type": "string", "enum": ["high", "med", "low"]}}}}}}
     client = anthropic.Anthropic()   # reads ANTHROPIC_API_KEY
     msg = client.messages.create(
-        model=MODEL, max_tokens=3000,
+        model=MODEL, max_tokens=8000,
         system=("You are David's fantasy-football GM assistant. Below are GROUNDED facts about his "
                 "rostered players — injury designations, depth-chart position, and recent news. Write a "
                 "terse 'what changed' note for each player with a REAL, actionable change. Use ONLY the "
                 "provided facts; never invent an injury, stat, or news item. Skip players whose facts "
                 "aren't meaningful. `change` = one plain sentence; `action` = start/bench/grab-handcuff/"
                 "monitor/none. `priority`: high = affects a likely starter this week."),
-        output_config={"format": {"type": "json_schema", "schema": schema}},
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
         messages=[{"role": "user", "content": "\n".join(lines)}])
     txt = next(b.text for b in msg.content if b.type == "text")
     return json.loads(txt)["notes"]
